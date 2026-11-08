@@ -39,7 +39,7 @@ export function render(doc, options) {
 export function formatParsed(parsed, options = {}, hooks = {}) {
   const { tree, text } = parsed;
   let parentMap = null;
-  const parents = { get: n => (parentMap ??= parentsOf(tree.root)).get(n) };
+  const parents = { get: (n) => (parentMap ??= parentsOf(tree.root)).get(n) };
   const protect = new Set();
   const reasons = new Map();
   const doVerify = options.juliaVerify !== false;
@@ -68,10 +68,13 @@ function regionsOf(protect, reasons, tree) {
   // Report only outermost protected nodes.
   const all = [...protect];
   const inside = (a, b) => a !== b && b.start <= a.start && a.end <= b.end;
-  return all.filter(n => !all.some(m => inside(n, m))).map(n => {
-    const { line, column } = tree.loc(n.start);
-    return { line, column: column + 1, start: n.start, end: n.end, reason: reasons.get(n) };
-  }).sort((a, b) => a.start - b.start);
+  return all
+    .filter((n) => !all.some((m) => inside(n, m)))
+    .map((n) => {
+      const { line, column } = tree.loc(n.start);
+      return { line, column: column + 1, start: n.start, end: n.end, reason: reasons.get(n) };
+    })
+    .sort((a, b) => a.start - b.start);
 }
 
 export function formatJulia(text, options = {}, hooks = {}) {

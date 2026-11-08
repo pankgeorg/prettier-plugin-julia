@@ -22,8 +22,8 @@ export const parsers = {
       const parsed = parseForFormat(text);
       return { type: 'JuliaFile', parsed, start: 0, end: text.length };
     },
-    locStart: node => node.start ?? 0,
-    locEnd: node => node.end ?? 0,
+    locStart: (node) => node.start ?? 0,
+    locEnd: (node) => node.end ?? 0,
   },
 };
 
@@ -32,12 +32,16 @@ const prefix = '[prettier-plugin-julia]';
 function report(filepath, result, text) {
   const name = filepath ?? '<input>';
   if (result.whole) {
-    console.warn(`${prefix} warn: ${name}: kept the whole file as written (formatting would change its meaning: ${result.whole})`);
+    console.warn(
+      `${prefix} warn: ${name}: kept the whole file as written (formatting would change its meaning: ${result.whole})`,
+    );
   }
   for (const r of result.regions) {
     const first = text.slice(r.start, r.end).split('\n')[0];
     const excerpt = first.length > 40 ? first.slice(0, 40) + '…' : first;
-    console.warn(`${prefix} warn: ${name}:${r.line}:${r.column}: kept \`${excerpt}\` as written (formatting would change its meaning: ${r.reason})`);
+    console.warn(
+      `${prefix} warn: ${name}:${r.line}:${r.column}: kept \`${excerpt}\` as written (formatting would change its meaning: ${r.reason})`,
+    );
   }
 }
 
@@ -62,7 +66,8 @@ export const options = {
     category: 'Julia',
     type: 'boolean',
     default: true,
-    description: 'Check every format with JuliaSyntax and keep code whose meaning would change as written (disable only to debug the printer).',
+    description:
+      'Check every format with JuliaSyntax and keep code whose meaning would change as written (disable only to debug the printer).',
   },
   juliaReport: {
     category: 'Julia',

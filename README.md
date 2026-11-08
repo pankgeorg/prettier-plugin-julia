@@ -8,6 +8,7 @@ compiled to WebAssembly (`wasm/parser.wasm`, 735 KB, no Julia needed at run time
 whose formatting would change what the program means is kept exactly as written, and
 reported. The plugin never writes a program that parses differently from yours.
 
+<!-- prettier-ignore -->
 ```julia
 # before
 function f(x::Int,y=2;k=3) where T
@@ -47,7 +48,7 @@ npx prettier --check "**/*.jl"
 
 Requires Node 22.23.3+ (22.x) or 24.22.1+ (Wasm GC and exception handling) and Prettier 3.
 
-Markdown files get their ```` ```julia ```` blocks formatted too, with no extra setup. Editor,
+Markdown files get their ` ```julia ` blocks formatted too, with no extra setup. Editor,
 lint-staged and pre-commit setup: [ECOSYSTEM.md](ECOSYSTEM.md).
 
 ## Style
@@ -64,6 +65,7 @@ written. `# prettier-ignore` and `#! format: off`/`#! format: on` are honoured. 
 
 After printing, the plugin parses the output with JuliaSyntax and compares both trees in a
 strict normal form:
+
 - whitespace and comments are ignored; leaf text must match exactly;
 - node kinds and flags must match: infix vs prefix call, `@m(x)` vs `@m x`, `mutable`,
   triple-quoted strings;
@@ -84,6 +86,7 @@ Input that JuliaSyntax rejects is reported as a syntax error, with its position,
 alone. A printer crash also leaves the file as it is.
 
 What "same meaning" does not cover, as for any formatter that moves code between lines:
+
 - source locations: `@__LINE__`, stack traces, and macros that read `__source__` see new
   line numbers;
 - statement grouping by `;` at top level: `a; b` on one line is a single `toplevel`
@@ -101,25 +104,25 @@ needed protecting; the tests inject printer bugs to show that they're caught.
 Real-world corpus: 25,174 unique Julia files (229 MB) from Julia 1.11/1.13 base, stdlib and
 tests, and the packages of several Julia depots, deduplicated by content. Arm64 server, Node 22, 4 worker threads.
 
-| | |
-|---|---|
-| Formatted and verified | 25,163 (3,267 already formatted) |
-| Rejected by JuliaSyntax (not valid Julia 1.13) | 11 |
-| Regions kept as written / whole files kept / crashes | 0 / 0 / 0 |
-| Not idempotent (formatting twice ≠ once) | 0 |
-| Time | 2.1 s/MB per worker, verification included; median 4 ms per file |
-| CLI latency, small file | 0.22 s (`node …/prettier.cjs`), 0.6 s through `npx` |
+|                                                      |                                                                  |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| Formatted and verified                               | 25,163 (3,267 already formatted)                                 |
+| Rejected by JuliaSyntax (not valid Julia 1.13)       | 11                                                               |
+| Regions kept as written / whole files kept / crashes | 0 / 0 / 0                                                        |
+| Not idempotent (formatting twice ≠ once)             | 0                                                                |
+| Time                                                 | 2.1 s/MB per worker, verification included; median 4 ms per file |
+| CLI latency, small file                              | 0.22 s (`node …/prettier.cjs`), 0.6 s through `npx`              |
 
 Same sample of 300 files with [Runic](https://github.com/fredrikekre/Runic.jl) 1.13 and
 [JuliaFormatter](https://github.com/domluna/JuliaFormatter.jl) 2.14 (defaults), checked with
 the same JuliaSyntax normal form:
 
-| | this plugin | Runic | JuliaFormatter |
-|---|---|---|---|
-| Files left unchanged | 31 | 88 | 38 |
-| Output parses to the same tree | 300 | 146 | 233 |
-| Time, 4.4 MB, warm | 5.7 s (1.3 s/MB with verification, 0.9 without) | 3.9 s | 1.6 s |
-| Start-up + tiny file | 0.22 s | 0.27 s | 0.52 s |
+|                                | this plugin                                     | Runic  | JuliaFormatter |
+| ------------------------------ | ----------------------------------------------- | ------ | -------------- |
+| Files left unchanged           | 31                                              | 88     | 38             |
+| Output parses to the same tree | 300                                             | 146    | 233            |
+| Time, 4.4 MB, warm             | 5.7 s (1.3 s/MB with verification, 0.9 without) | 3.9 s  | 1.6 s          |
+| Start-up + tiny file           | 0.22 s                                          | 0.27 s | 0.52 s         |
 
 Runic and JuliaFormatter change trees on purpose: Runic adds explicit `return`s, braces in
 `where {T}`, parentheses around range operands and normalizes float literals; JuliaFormatter
@@ -155,16 +158,16 @@ MIT. `wasm/parser.wasm` contains code from Julia and JuliaSyntax (MIT) and WasmC
 
 Warm, 300-file sample, `node scripts/bench.mjs LIST` (s/MB):
 
-| Stage | s/MB | % |
-|---|---:|---:|
-| JuliaSyntax parse (Wasm `parse_src`) | 0.15 | 11 |
-| Copying source in and the tree out of Wasm | 0.09 | 7 |
-| Tree building, trivia hoisting | 0.14 | 10 |
-| Doc building (this printer) | 0.24 | 18 |
-| Line fitting (Prettier's `printDocToString`) | 0.27 | 21 |
-| Verification: parsing the output | 0.24 | 19 |
-| Verification: tree building and comparison | 0.17 | 13 |
-| **Total** | **1.31** | |
+| Stage                                        |     s/MB |   % |
+| -------------------------------------------- | -------: | --: |
+| JuliaSyntax parse (Wasm `parse_src`)         |     0.15 |  11 |
+| Copying source in and the tree out of Wasm   |     0.09 |   7 |
+| Tree building, trivia hoisting               |     0.14 |  10 |
+| Doc building (this printer)                  |     0.24 |  18 |
+| Line fitting (Prettier's `printDocToString`) |     0.27 |  21 |
+| Verification: parsing the output             |     0.24 |  19 |
+| Verification: tree building and comparison   |     0.17 |  13 |
+| **Total**                                    | **1.31** |     |
 
 With `juliaVerify: false` it's 0.89 s/MB. The parser itself is under a fifth of the time;
 a WasmCodegen build with its pending optimizations gave the same parse speed.

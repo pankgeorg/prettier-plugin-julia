@@ -8,7 +8,14 @@ assert.equal(bytes.length, manifest.bytes);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.sha256);
 const module = new WebAssembly.Module(bytes);
 assert.deepEqual(WebAssembly.Module.imports(module), []);
-assert.deepEqual(WebAssembly.Module.exports(module).map(e => e.name).sort(), [...manifest.abi.exports].sort());
+assert.deepEqual(
+  WebAssembly.Module.exports(module)
+    .map((e) => e.name)
+    .sort(),
+  [...manifest.abi.exports].sort(),
+);
 const { parseTree } = await import('../src/tree.js');
 assert.equal(parseTree('α = 1').diagnostics.length, 0);
-console.log(`parser.wasm ok: ${bytes.length} bytes, sha256 ${manifest.sha256.slice(0, 12)}…, JuliaSyntax of Julia ${manifest.versions.julia} (${process.version})`);
+console.log(
+  `parser.wasm ok: ${bytes.length} bytes, sha256 ${manifest.sha256.slice(0, 12)}…, JuliaSyntax of Julia ${manifest.versions.julia} (${process.version})`,
+);

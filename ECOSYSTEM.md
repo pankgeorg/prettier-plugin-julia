@@ -4,15 +4,15 @@ What works with prettier-plugin-julia, what needs a line of configuration, and w
 actually run. Tested with Prettier 3.9.10 on Node 22.23.3 and 24.22.1, from the packed
 tarball (`npm pack`) installed into a fresh project.
 
-| Where | Status | Glue needed |
-|---|---|---|
-| `prettier --write` / `--check` on `.jl` | works | list the plugin in `.prettierrc` |
-| `.prettierrc` options and `overrides` | works | none |
-| Markdown: ```` ```julia ```` / ```` ```jl ```` blocks | works out of the box | none |
-| lint-staged | works | `"*.jl": "prettier --write"` |
-| pre-commit (`repo: local`) | works | a local hook (below) |
-| Prettier API (`format`, `formatWithCursor`, `getSupportInfo`, `getFileInfo`) | works | none |
-| VS Code (Prettier extension) | expected to work, not run here | `prettier.documentSelectors` |
+| Where                                                                        | Status                         | Glue needed                      |
+| ---------------------------------------------------------------------------- | ------------------------------ | -------------------------------- |
+| `prettier --write` / `--check` on `.jl`                                      | works                          | list the plugin in `.prettierrc` |
+| `.prettierrc` options and `overrides`                                        | works                          | none                             |
+| Markdown: ` ```julia ` / ` ```jl ` blocks                                    | works out of the box           | none                             |
+| lint-staged                                                                  | works                          | `"*.jl": "prettier --write"`     |
+| pre-commit (`repo: local`)                                                   | works                          | a local hook (below)             |
+| Prettier API (`format`, `formatWithCursor`, `getSupportInfo`, `getFileInfo`) | works                          | none                             |
+| VS Code (Prettier extension)                                                 | expected to work, not run here | `prettier.documentSelectors`     |
 
 ## Install and configure
 
@@ -47,10 +47,10 @@ Plugin options, in `.prettierrc` (on the command line, `--no-julia-verify` /
 `--no-julia-report` are recognized only when the plugin is also given with `--plugin
 prettier-plugin-julia`; otherwise Prettier warns "Ignored unknown option"):
 
-| Option | Default | |
-|---|---|---|
-| `juliaVerify` | `true` | Check every format with JuliaSyntax; keep code whose meaning would change as written. Turn off only to debug the printer. |
-| `juliaReport` | `true` | Print one warning per region kept as written. |
+| Option        | Default |                                                                                                                           |
+| ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `juliaVerify` | `true`  | Check every format with JuliaSyntax; keep code whose meaning would change as written. Turn off only to debug the printer. |
+| `juliaReport` | `true`  | Print one warning per region kept as written.                                                                             |
 
 ## CLI
 
@@ -60,7 +60,7 @@ npx prettier --write src/ docs/    # .jl and the julia blocks of .md files
 ```
 
 Syntax errors are reported by Prettier with JuliaSyntax's message and position
-(`[error] a.jl: SyntaxError: Expected `)` or `,` (1:4)`); the file is left alone. Regions the
+(``[error] a.jl: SyntaxError: Expected `)` or `,` (1:4)``); the file is left alone. Regions the
 safety check kept as written are reported on stderr:
 
 ```
@@ -75,9 +75,9 @@ Prettier's Markdown printer formats fenced code blocks whose info string names a
 some plugin registers (`julia`, `jl`), through the plugin's own parser and printer, so the
 safety check applies there too. Nothing to configure beyond `plugins`. A block that doesn't
 parse (a fragment, an error example) is left exactly as written; Prettier swallows embed
-errors silently. Indented code blocks and ```` ```julia-repl ```` blocks are not touched.
+errors silently. Indented code blocks and ` ```julia-repl ` blocks are not touched.
 
-Verified on a README with a valid block (formatted), an invalid block (kept) and a ```` ```jl ````
+Verified on a README with a valid block (formatted), an invalid block (kept) and a ` ```jl `
 block (formatted).
 
 ## lint-staged

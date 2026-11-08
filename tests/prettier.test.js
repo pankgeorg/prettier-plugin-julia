@@ -4,13 +4,13 @@ import assert from 'node:assert/strict';
 import * as prettier from 'prettier';
 import * as plugin from '../src/index.js';
 
-const opts = extra => ({ plugins: [plugin], ...extra });
+const opts = (extra) => ({ plugins: [plugin], ...extra });
 
 test('.jl files are inferred and formatted with 4-space indent and width 92 by default', async () => {
   const out = await prettier.format('function f(x,y)\n  x+y\nend\n', opts({ filepath: 'a.jl' }));
   assert.equal(out, 'function f(x, y)\n    x + y\nend\n');
   const info = await prettier.getSupportInfo({ plugins: [plugin] });
-  const julia = info.languages.find(l => l.name === 'Julia');
+  const julia = info.languages.find((l) => l.name === 'Julia');
   assert.deepEqual(julia.extensions, ['.jl']);
 });
 
@@ -33,11 +33,14 @@ test('Markdown blocks use 4-space indent and 92 columns, not the Markdown defaul
 });
 
 test('syntax errors surface as Prettier errors with a location', async () => {
-  await assert.rejects(prettier.format('f(x\n', opts({ parser: 'julia' })), e => /Expected/.test(e.message) && e.loc?.start?.line === 1);
+  await assert.rejects(
+    prettier.format('f(x\n', opts({ parser: 'julia' })),
+    (e) => /Expected/.test(e.message) && e.loc?.start?.line === 1,
+  );
 });
 
 test('juliaVerify and juliaReport options exist', async () => {
   const info = await prettier.getSupportInfo({ plugins: [plugin] });
-  const names = info.options.map(o => o.name);
+  const names = info.options.map((o) => o.name);
   assert.ok(names.includes('juliaVerify') && names.includes('juliaReport'));
 });

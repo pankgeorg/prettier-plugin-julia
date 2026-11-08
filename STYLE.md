@@ -18,15 +18,11 @@ Prettier options: `printWidth` (default 92 here), `tabWidth` (default 4), `useTa
   - after `(`, `[`, `{` and commas inside brackets;
   - after binary and assignment operators;
   - before `for`/`if` in a generator or comprehension.
-  None are added inside matrix rows or between macro arguments (`@m a b`), where a newline
-  would change the meaning.
+    None are added inside matrix rows or between macro arguments (`@m a b`), where a newline
+    would change the meaning.
 - **Lists that don't fit** go one element per line, with a trailing comma:
   ```julia
-  very_long_function_name(
-      argument_number_one,
-      argument_number_two;
-      keyword=1,
-  )
+  very_long_function_name(argument_number_one, argument_number_two; keyword=1)
   ```
   A last argument that is a bracket, a block, a multi-line string or a `do`/`function`
   "hugs" the call: `println(io, """` … `""")`, `f(a, [` … `])`.
