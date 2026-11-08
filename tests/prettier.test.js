@@ -26,6 +26,12 @@ test('```julia blocks in Markdown are formatted through the plugin', async () =>
   assert.equal(out, '# T\n\n```julia\nf(x) = x + 1\n```\n\n```julia\nbroken(\n```\n');
 });
 
+test('Markdown blocks use 4-space indent and 92 columns, not the Markdown defaults', async () => {
+  const md = '- item\n\n```julia\nfunction g()\nx\nend\n```\n';
+  const out = await prettier.format(md, opts({ parser: 'markdown' }));
+  assert.equal(out, '- item\n\n```julia\nfunction g()\n    x\nend\n```\n');
+});
+
 test('syntax errors surface as Prettier errors with a location', async () => {
   await assert.rejects(prettier.format('f(x\n', opts({ parser: 'julia' })), e => /Expected/.test(e.message) && e.loc?.start?.line === 1);
 });

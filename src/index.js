@@ -46,7 +46,10 @@ export const printers = {
     print(path, options) {
       const node = path.node;
       if (node.type !== 'JuliaFile') return '';
-      const result = formatParsed(node.parsed, options);
+      // In a Markdown ```julia block, tabWidth/printWidth are the Markdown file's (Prettier's
+      // defaults, 2 and 80, unless set): use Julia's 4 and 92 there.
+      const opts = options.parentParser ? { ...options, ...defaultOptions } : options;
+      const result = formatParsed(node.parsed, opts);
       if (options.juliaReport !== false) report(options.filepath, result, node.parsed.text);
       return result.output;
     },
