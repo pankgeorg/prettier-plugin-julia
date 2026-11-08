@@ -578,7 +578,9 @@ function printLet(n, ctx) {
   if (bp.xs.length !== 2 * items.length - 1 && items.length) return null;
   const multi = binds.children.some(c => isWs(c) && c.text.includes('\n'));
   const docs = items.map(x => print(x, ctx, binds));
-  const head = !items.length ? 'let' : multi ? ['let ', indent(join([',', hardline], docs))] : ['let ', join(', ', docs)];
+  // the first binding sits on the `let` line, outside the indent (a multi-line string there
+  // must line up with that line, not with the continuation indent)
+  const head = !items.length ? 'let' : multi ? ['let ', docs[0], indent(docs.slice(1).map(d => [',', hardline, d]))] : ['let ', join(', ', docs)];
   return [head, blockBody(body, ctx)];
 }
 
