@@ -4,13 +4,14 @@
 // Dropped: trivia (whitespace, comments, punctuation and keywords implied by the node kind;
 // error tokens are kept) and TOMBSTONEs. Kept: node kinds, leaf text (exact), and all flags
 // except TRIVIA (bit 0), NON_TERMINAL (bit 7), TOPLEVEL_SEMICOLONS on `toplevel` (`a; b` may
-// become two lines) and the trailing-comma flag (bit 9) on list kinds (`f(a, b,)` ≡ `f(a, b)`
-// as an Expr; a 1-tuple keeps its comma by construction, and `(a)` is `parens`, not `tuple`).
+// become two lines) and the trailing-comma flag (bit 9) on call-like list kinds (`f(a, b,)` ≡
+// `f(a, b)` as an Expr), and on tuples of more than one element. On a one-element `tuple` the
+// flag is compared: `((x, y),) -> …` takes one argument, `((x, y)) -> …` two.
 // Operator and identifier leaves compare by text alone (JuliaSyntax lexes `<:` as either).
 // Comments must survive in order (compared with trailing whitespace trimmed).
 import { parseTree, CLASS, hasErrors, isErrorDiagnostic } from './tree.js';
 
-const LIST_KINDS = new Set(['tuple', 'call', 'dotcall', 'curly', 'ref', 'vect', 'braces', 'parameters', 'macrocall']);
+const LIST_KINDS = new Set(['call', 'dotcall', 'curly', 'ref', 'vect', 'braces', 'parameters', 'macrocall']);
 
 function semFlags(kind, flags) {
   let f = flags & ~(1 | (1 << 7));
@@ -40,7 +41,11 @@ function push(n, parent, out) {
   }
   const c = [];
   for (const ch of n.children) push(ch, n.kind, c);
-  out.push({ k: n.kind, f: semFlags(n.kind, n.flags), c, n });
+  let f = semFlags(n.kind, n.flags);
+  // A tuple's trailing comma only matters with one element: `((x, y),) -> …` takes one
+  // argument, `((x, y)) -> …` two; `(a, b,)` ≡ `(a, b)` and `(; a=1,)` ≡ `(; a=1)`.
+  if (n.kind === 'tuple' && !(c.length === 1 && c[0].k !== 'parameters')) f &= ~(1 << 9);
+  out.push({ k: n.kind, f, c, n });
 }
 
 const show = s => s.t !== undefined ? `${s.k === '#id' ? s.n.kind : s.k} ${JSON.stringify(s.t)}`

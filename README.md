@@ -83,6 +83,13 @@ reported:
 Input that JuliaSyntax rejects is reported as a syntax error, with its position, and left
 alone. A printer crash also leaves the file as it is.
 
+What "same meaning" does not cover, as for any formatter that moves code between lines:
+- source locations: `@__LINE__`, stack traces, and macros that read `__source__` see new
+  line numbers;
+- statement grouping by `;` at top level: `a; b` on one line is a single `toplevel`
+  expression, two lines are two. Only code that loads files with
+  `include(mapexpr, …)`/`include_string(mapexpr, …)` can tell the difference.
+
 The printer is written so that this rarely triggers: it only breaks lines where Julia reads a
 line break as whitespace or continuation (never inside a matrix row or between macro
 arguments), keeps `- 2`, `[x -y]`, `"""doc""" f` and the like as written, and prints

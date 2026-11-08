@@ -337,6 +337,7 @@ function printTokens(n, ctx) {
   let ws = '', prev = null;
   for (const c of n.children) {
     if (isWs(c)) { ws += c.text; continue; }
+    if (!isLeaf(c) && c.children.length && c.children.every(isWs)) { ws += c.children.map(k => k.text).join(''); continue; }
     const gap = prev === null ? '' : ws + trailingWs(prev) + leadingWs(c);
     const nls = countNl(gap);
     if (!isLeaf(c) && c.kind === 'block' && !isKeywordBlock(c) && !c.children.some(k => kw(k, ',') || kw(k, '('))) {
@@ -744,7 +745,13 @@ function collectList(n, openIdx) {
       if (params) return null;
       params = collectParams(c);
       if (!params) return null;
-      if (pendingLead.length) params.lead = pendingLead.concat(params.lead), pendingLead = [];
+      if (pendingLead.length) {
+        // comments before `;`: after the last positional element, else before the first keyword
+        if (elems.length) elems.at(-1).trailing.push(...pendingLead);
+        else if (params.elems.length) params.elems[0].lead.unshift(...pendingLead);
+        else params.semiTrail.unshift(...pendingLead);
+        pendingLead = [];
+      }
       lastSep = 'params';
       continue;
     }
@@ -763,10 +770,13 @@ function collectParams(p) {
   const kids = p.children;
   const elems = [];
   let lead = [], lastSep = null, nlSince = false, seenSemi = false;
+  const semiTrail = [];
   for (const c of kids) {
     if (isWs(c)) { if (c.text.includes('\n')) nlSince = true; continue; }
     if (isComment(c)) {
-      if (!nlSince && elems.length) elems.at(-1).trailing.push(c); else lead.push(c);
+      if (!nlSince && elems.length) elems.at(-1).trailing.push(c);
+      else if (!nlSince && seenSemi && !elems.length && !lead.length) semiTrail.push(c);
+      else lead.push(c);
       continue;
     }
     nlSince = false;
@@ -777,7 +787,7 @@ function collectParams(p) {
   }
   if (!seenSemi) return null;
   if (lead.length) { if (!elems.length) return null; elems.at(-1).trailing.push(...lead); }
-  return { elems, lead: [] };
+  return { elems, lead: [], semiTrail };
 }
 
 function printElem(e, ctx, parent) {
@@ -794,22 +804,25 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
   const inner = sub(ctx, { flat: false, compact: false });
   const elems = L.elems.map(e => printElem(e, inner, n));
   const params = L.params ? L.params.elems.map(e => printElem(e, inner, n)) : null;
-  const hasComments = L.elems.some(e => e.lead.length || e.trailing.length) || (L.params && L.params.elems.some(e => e.lead.length || e.trailing.length)) || L.dangling.length;
+  const hasComments = L.elems.some(e => e.lead.length || e.trailing.length) || (L.params && (L.params.semiTrail.length || L.params.elems.some(e => e.lead.length || e.trailing.length))) || L.dangling.length;
   const items = [];
   elems.forEach((e, i) => {
     const last = i === elems.length - 1;
-    items.push([e.doc, last ? '' : ',', e.trail, last ? '' : line]);
+    // the last positional element's comments go after the `;` (where a reparse puts them)
+    items.push([e.doc, last ? '' : ',', last && params ? '' : e.trail, last ? '' : line]);
   });
+  const semiTrail = params ? [elems.length ? elems.at(-1).trail : '', L.params.semiTrail.map(c => trailingComment({ c, gap: gapBefore(TEXT, c) }))] : '';
   const single = elems.length === 1 && !params;
   const lastN = params ? L.params.elems.at(-1)?.n : L.elems.at(-1)?.n;
   const lastIsGenerator = (lastN && ['generator', 'flatten'].includes(lastN.kind) && !params) || (lastN && endsOpen(lastN));
   let tail = '';
-  if (forceComma && single && L.trailingComma) tail = ',';
+  // a one-element tuple's comma is part of its meaning (`(a,)`, `((x, y),) -> …`): as written
+  if (n.kind === 'tuple' && single) tail = L.trailingComma ? ',' : '';
   else if (!noTrailingComma && !lastIsGenerator && (params ? params.length : elems.length)) tail = ifBreak(',');
   const content = [];
   if (elems.length) content.push(items);
   if (params) {
-    content.push(n.kind === 'tuple' && elems.length === 1 ? ',;' : ';', params.length ? line : '');
+    content.push(n.kind === 'tuple' && elems.length === 1 ? ',;' : ';', semiTrail, params.length ? line : '');
     params.forEach((e, i) => {
       const last = i === params.length - 1;
       content.push(e.doc, last ? '' : ',', e.trail, last ? '' : line);
@@ -970,7 +983,7 @@ function printCall(n, ctx) {
     const operand = xs[i];
     const spaced = hasWsBetween(n, xs[i - 1], operand);
     // Keep `- 2` (a call; `-2` is a literal) and `- (x)` (≠ `-(x)`) as written.
-    const keep = spaced && (isNumber(operand) || operand.kind === 'parens' || operand.kind === 'tuple' || OP_CHARS.test(ctx.text[operand.start]));
+    const keep = spaced && (isNumber(operand) || /^[0-9.(]/.test(ctx.text[operand.start]) || operand.kind === 'parens' || operand.kind === 'tuple' || OP_CHARS.test(ctx.text[operand.start]));
     return [opText, keep ? ' ' : '', print(operand, ctx, n)];
   }
   if (isPostfixOpCall(n)) return null;
@@ -998,11 +1011,11 @@ function printInfix(n, xs, comments, ctx) {
     let op = xs[i];
     if (!isLeaf(op)) return null;
     let text = op.text;
+    const opAt = i;
     if (n.kind === 'dotcall' && kw(op, '.')) {
       if (!isLeaf(xs[i + 1])) return null;
       text = '.' + xs[i + 1].text; i++;
     }
-    const opAt = i;
     i++;
     if (i >= xs.length) return null;
     ops.push({ text, at: i, opAt });
