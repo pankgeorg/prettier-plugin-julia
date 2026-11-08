@@ -22,8 +22,8 @@ export const parsers = {
       const parsed = parseForFormat(text);
       return { type: 'JuliaFile', parsed, start: 0, end: text.length };
     },
-    locStart: node => node.start ?? 0,
-    locEnd: node => node.end ?? 0,
+    locStart: (node) => node.start ?? 0,
+    locEnd: (node) => node.end ?? 0,
   },
 };
 
@@ -32,12 +32,16 @@ const prefix = '[prettier-plugin-julia]';
 function report(filepath, result, text) {
   const name = filepath ?? '<input>';
   if (result.whole) {
-    console.warn(`${prefix} warn: ${name}: kept the whole file as written (formatting would change its meaning: ${result.whole})`);
+    console.warn(
+      `${prefix} warn: ${name}: kept the whole file as written (formatting would change its meaning: ${result.whole})`,
+    );
   }
   for (const r of result.regions) {
     const first = text.slice(r.start, r.end).split('\n')[0];
     const excerpt = first.length > 40 ? first.slice(0, 40) + '…' : first;
-    console.warn(`${prefix} warn: ${name}:${r.line}:${r.column}: kept \`${excerpt}\` as written (formatting would change its meaning: ${r.reason})`);
+    console.warn(
+      `${prefix} warn: ${name}:${r.line}:${r.column}: kept \`${excerpt}\` as written (formatting would change its meaning: ${r.reason})`,
+    );
   }
 }
 
@@ -46,7 +50,10 @@ export const printers = {
     print(path, options) {
       const node = path.node;
       if (node.type !== 'JuliaFile') return '';
-      const result = formatParsed(node.parsed, options);
+      // In a Markdown ```julia block, tabWidth/printWidth are the Markdown file's (Prettier's
+      // defaults, 2 and 80, unless set): use Julia's 4 and 92 there.
+      const opts = options.parentParser ? { ...options, ...defaultOptions } : options;
+      const result = formatParsed(node.parsed, opts);
       if (options.juliaReport !== false) report(options.filepath, result, node.parsed.text);
       return result.output;
     },
@@ -59,7 +66,8 @@ export const options = {
     category: 'Julia',
     type: 'boolean',
     default: true,
-    description: 'Check every format with JuliaSyntax and keep code whose meaning would change as written (disable only to debug the printer).',
+    description:
+      'Check every format with JuliaSyntax and keep code whose meaning would change as written (disable only to debug the printer).',
   },
   juliaReport: {
     category: 'Julia',

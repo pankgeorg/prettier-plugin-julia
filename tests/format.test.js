@@ -7,7 +7,9 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { formatJulia } from '../src/format.js';
 
 const dir = new URL('./format/', import.meta.url);
-const inputs = readdirSync(dir).filter(f => f.endsWith('.jl') && !f.endsWith('.out.jl')).sort();
+const inputs = readdirSync(dir)
+  .filter((f) => f.endsWith('.jl') && !f.endsWith('.out.jl'))
+  .sort();
 
 for (const name of inputs) {
   test(`format ${name}`, () => {

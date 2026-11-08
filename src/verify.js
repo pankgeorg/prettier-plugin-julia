@@ -30,7 +30,7 @@ export function semTree(root) {
 function push(n, parent, out) {
   if (n.text !== undefined) {
     const err = n.cls & CLASS.ERROR;
-    if ((!err && (n.cls & (CLASS.TRIVIA | CLASS.WHITESPACE))) || n.kind === 'TOMBSTONE') return;
+    if ((!err && n.cls & (CLASS.TRIVIA | CLASS.WHITESPACE)) || n.kind === 'TOMBSTONE') return;
     const k = n.cls & (CLASS.OPERATOR | CLASS.IDENTIFIER) ? '#id' : n.kind;
     out.push({ k, f: semFlags(n.kind, n.flags), t: n.text, n });
     return;
@@ -48,9 +48,14 @@ function push(n, parent, out) {
   out.push({ k: n.kind, f, c, n });
 }
 
-const show = s => s.t !== undefined ? `${s.k === '#id' ? s.n.kind : s.k} ${JSON.stringify(s.t)}`
-  : `(${s.k}${s.c.map(x => ' ' + show(x)).join('')})`;
-const brief = s => { const t = show(s); return t.length > 120 ? t.slice(0, 117) + '...' : t; };
+const show = (s) =>
+  s.t !== undefined
+    ? `${s.k === '#id' ? s.n.kind : s.k} ${JSON.stringify(s.t)}`
+    : `(${s.k}${s.c.map((x) => ' ' + show(x)).join('')})`;
+const brief = (s) => {
+  const t = show(s);
+  return t.length > 120 ? t.slice(0, 117) + '...' : t;
+};
 
 function same(x, y) {
   if (x.k !== y.k || x.f !== y.f || x.t !== y.t) return false;
@@ -63,7 +68,8 @@ function same(x, y) {
 /** First difference: { message, node } with `node` the innermost differing input node. */
 export function firstDifference(a, b, parentNode = null) {
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i], y = b[i];
+    const x = a[i],
+      y = b[i];
     if (x && !y) return { message: `missing after formatting: ${brief(x)}`, node: x.n };
     if (!x && y) return { message: `added by formatting: ${brief(y)}`, node: parentNode };
     if (!same(x, y)) {
@@ -76,9 +82,10 @@ export function firstDifference(a, b, parentNode = null) {
 
 export function commentsOf(root) {
   const out = [];
-  const walk = n => {
-    if (n.text !== undefined) { if (n.kind === 'Comment') out.push({ text: n.text.trimEnd(), n }); }
-    else for (const c of n.children) walk(c);
+  const walk = (n) => {
+    if (n.text !== undefined) {
+      if (n.kind === 'Comment') out.push({ text: n.text.trimEnd(), n });
+    } else for (const c of n.children) walk(c);
   };
   walk(root);
   return out;
@@ -94,17 +101,23 @@ export function verify(input, output) {
     const d = b.diagnostics.find(isErrorDiagnostic);
     // Locate it in the input through the first difference of the (error-recovered) trees.
     const diff = firstDifference(semTree(input.root), semTree(b.root), null);
-    return { message: `output does not parse: ${d.message} (output ${d.loc.line}:${d.loc.column + 1})`, node: diff?.node ?? null };
+    return {
+      message: `output does not parse: ${d.message} (output ${d.loc.line}:${d.loc.column + 1})`,
+      node: diff?.node ?? null,
+    };
   }
   // Fast path: walk both trees in normal form side by side (no intermediate trees).
   if (sameStream(input.root, b.root)) return null;
   const d = firstDifference(semTree(input.root), semTree(b.root), null);
   if (d) return d;
-  const ca = commentsOf(input.root), cb = commentsOf(b.root);
+  const ca = commentsOf(input.root),
+    cb = commentsOf(b.root);
   for (let i = 0; i < Math.max(ca.length, cb.length); i++) {
     if (ca[i]?.text !== cb[i]?.text) {
-      return { message: `comment ${i + 1}: ${JSON.stringify(ca[i]?.text ?? '(none)')} became ${JSON.stringify(cb[i]?.text ?? '(none)')}`,
-        node: ca[i]?.n ?? null };
+      return {
+        message: `comment ${i + 1}: ${JSON.stringify(ca[i]?.text ?? '(none)')} became ${JSON.stringify(cb[i]?.text ?? '(none)')}`,
+        node: ca[i]?.n ?? null,
+      };
     }
   }
   return null;
@@ -112,22 +125,31 @@ export function verify(input, output) {
 
 // ─── Streaming comparison (the common, equal case) ─────────────────────
 
-const skipLeaf = n => (!(n.cls & CLASS.ERROR) && (n.cls & (CLASS.TRIVIA | CLASS.WHITESPACE))) || n.kind === 'TOMBSTONE';
+const skipLeaf = (n) => (!(n.cls & CLASS.ERROR) && n.cls & (CLASS.TRIVIA | CLASS.WHITESPACE)) || n.kind === 'TOMBSTONE';
 
 /** Normal-form events of a tree, one at a time: type 'o' (open) / 'l' (leaf) / 'c' (close) / 'e' (end). */
 class Cursor {
   constructor(root) {
     this.stack = [{ n: root, i: 0, splice: true, parent: '' }];
     this.comments = [];
-    this.type = ''; this.k = ''; this.f = 0; this.t = undefined;
+    this.type = '';
+    this.k = '';
+    this.f = 0;
+    this.t = undefined;
   }
   next() {
     for (;;) {
       const top = this.stack.at(-1);
-      if (!top) { this.type = 'e'; return; }
+      if (!top) {
+        this.type = 'e';
+        return;
+      }
       if (top.i >= top.n.children.length) {
         this.stack.pop();
-        if (!top.splice) { this.type = 'c'; return; }
+        if (!top.splice) {
+          this.type = 'c';
+          return;
+        }
         continue;
       }
       const c = top.n.children[top.i++];
@@ -135,34 +157,46 @@ class Cursor {
       if (c.text !== undefined) {
         if (c.kind === 'Comment') this.comments.push(c.text.trimEnd());
         if (skipLeaf(c)) continue;
-        this.type = 'l'; this.k = c.cls & (CLASS.OPERATOR | CLASS.IDENTIFIER) ? '#id' : c.kind;
-        this.f = semFlags(c.kind, c.flags); this.t = c.text;
+        this.type = 'l';
+        this.k = c.cls & (CLASS.OPERATOR | CLASS.IDENTIFIER) ? '#id' : c.kind;
+        this.f = semFlags(c.kind, c.flags);
+        this.t = c.text;
         return;
       }
-      if (c.kind === 'toplevel' && parent === 'toplevel') { this.stack.push({ n: c, i: 0, splice: true, parent }); continue; }
+      if (c.kind === 'toplevel' && parent === 'toplevel') {
+        this.stack.push({ n: c, i: 0, splice: true, parent });
+        continue;
+      }
       let f = semFlags(c.kind, c.flags);
       if (c.kind === 'tuple' && !singleNonParam(c)) f &= ~(1 << 9);
       this.stack.push({ n: c, i: 0, splice: false, parent });
-      this.type = 'o'; this.k = c.kind; this.f = f; this.t = undefined;
+      this.type = 'o';
+      this.k = c.kind;
+      this.f = f;
+      this.t = undefined;
       return;
     }
   }
 }
 
 function singleNonParam(n) {
-  let count = 0, last = null;
+  let count = 0,
+    last = null;
   for (const c of n.children) {
     if (c.text !== undefined && skipLeaf(c)) continue;
-    count++; last = c;
+    count++;
+    last = c;
     if (count > 1) return false;
   }
   return count === 1 && last.kind !== 'parameters';
 }
 
 function sameStream(a, b) {
-  const x = new Cursor(a), y = new Cursor(b);
+  const x = new Cursor(a),
+    y = new Cursor(b);
   for (;;) {
-    x.next(); y.next();
+    x.next();
+    y.next();
     if (x.type !== y.type || x.k !== y.k || x.f !== y.f || x.t !== y.t) return false;
     if (x.type === 'e') break;
   }

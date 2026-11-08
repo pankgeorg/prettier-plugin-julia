@@ -40,28 +40,87 @@ test('a printer bug that drops a comment is caught', () => {
 
 test('a bug everywhere falls back to the whole file as written', () => {
   const input = 'x = 1\ny = 2\n';
-  const mutate = n => (n.kind === 'Integer' ? '3' : undefined);
+  const mutate = (n) => (n.kind === 'Integer' ? '3' : undefined);
   const r = formatJulia(input, {}, { mutate });
   assert.equal(r.output, input);
   assert.equal(r.regions.length, 2);
 });
 
 test('syntax errors are reported, never formatted', () => {
-  assert.throws(() => formatJulia('f(x\n'), e => e.name === 'SyntaxError' && e.loc.start.line === 1 && e.loc.start.column === 4);
+  assert.throws(
+    () => formatJulia('f(x\n'),
+    (e) => e.name === 'SyntaxError' && e.loc.start.line === 1 && e.loc.start.column === 4,
+  );
 });
 
 // Patterns that silently changed meaning in other formatters (topiary-julia's corpus runs).
 const PITFALLS = [
-  '[x -y]', '[x +y]', '[a ~b]', '[x+y +z]', '[x - y]', '[1:100 -1:-1:-100]',
-  '"""doc""" f', '"""\n    doc\n"""\nf(x) = x', 'x = - 2', 'x = -2', 'x = - (2)', 'x = -(2)',
-  'for i = 1 : n\nend', 'y = [1 : n]', 'x"s" in y', 'import Base: ==', 'import Base: +, -',
-  '@test .√[3,4]', '(x=1;y=2)->x', 'a ? b : c', 'x = a ? -1 : +1', 'f(x; k=1)', 'f(x, ; k=1)',
-  '(a,; b)', '(a; b)', 'x.:+', 'a.b', '2x', '2(x+1)', 'x\'', "x'y'", '[1 2\n 3 4]', '[1;; 2]',
-  '@m[1]', '@NamedTuple{a::Int}', 'f(@nospecialize x)', 'g(x for x in y)', 'g(x for x in y if x > 1)',
-  'x = a : b', 'r = a: :b', 'a .+ b', '1 .+ 2', '(10 .^ [-1])[1]', 'x::T where T', 'A{<:Real}',
-  'a = :sym', 'b = :(:sym)', '$x', ':($x + 1)', 'x === y', 'a <: b', 'f(a)(b)', '`cmd $x`',
-  'using A: b, c', 'export a, b', 'const x = 1', 'global y', 'local z = 1', 'return a, b',
-  'x = (a, b)', 'a, b = 1, 2', 'f(;)', '[;]', '(;)', 'f() do; end', 'x = begin end',
+  '[x -y]',
+  '[x +y]',
+  '[a ~b]',
+  '[x+y +z]',
+  '[x - y]',
+  '[1:100 -1:-1:-100]',
+  '"""doc""" f',
+  '"""\n    doc\n"""\nf(x) = x',
+  'x = - 2',
+  'x = -2',
+  'x = - (2)',
+  'x = -(2)',
+  'for i = 1 : n\nend',
+  'y = [1 : n]',
+  'x"s" in y',
+  'import Base: ==',
+  'import Base: +, -',
+  '@test .√[3,4]',
+  '(x=1;y=2)->x',
+  'a ? b : c',
+  'x = a ? -1 : +1',
+  'f(x; k=1)',
+  'f(x, ; k=1)',
+  '(a,; b)',
+  '(a; b)',
+  'x.:+',
+  'a.b',
+  '2x',
+  '2(x+1)',
+  "x'",
+  "x'y'",
+  '[1 2\n 3 4]',
+  '[1;; 2]',
+  '@m[1]',
+  '@NamedTuple{a::Int}',
+  'f(@nospecialize x)',
+  'g(x for x in y)',
+  'g(x for x in y if x > 1)',
+  'x = a : b',
+  'r = a: :b',
+  'a .+ b',
+  '1 .+ 2',
+  '(10 .^ [-1])[1]',
+  'x::T where T',
+  'A{<:Real}',
+  'a = :sym',
+  'b = :(:sym)',
+  '$x',
+  ':($x + 1)',
+  'x === y',
+  'a <: b',
+  'f(a)(b)',
+  '`cmd $x`',
+  'using A: b, c',
+  'export a, b',
+  'const x = 1',
+  'global y',
+  'local z = 1',
+  'return a, b',
+  'x = (a, b)',
+  'a, b = 1, 2',
+  'f(;)',
+  '[;]',
+  '(;)',
+  'f() do; end',
+  'x = begin end',
 ];
 
 for (const code of PITFALLS) {
