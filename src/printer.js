@@ -77,6 +77,7 @@ function isStringMacro(n) {
  * @param protect Set of nodes to print verbatim
  */
 export function printJulia(tree, text, protect = new Set()) {
+  TEXT = text;
   const ctx = { text, protect, flat: false, compact: false, parent: null };
   const { doc, empty } = printStatements(tree.root.children, ctx, { top: true });
   return empty ? '' : [doc, hardline];
@@ -106,8 +107,9 @@ function printLeaf(n, ctx) {
   return n.text.includes('\n') ? literalText(n.text) : n.text;
 }
 
-function printCommentInline(n, ctx) {
-  if (isLineComment(n)) return [lineSuffix(' ' + n.text.trimEnd()), breakParent];
+let TEXT = '';
+function printCommentInline(n) {
+  if (isLineComment(n)) return [lineSuffix(gapBefore(TEXT, n) + n.text.trimEnd()), breakParent];
   return n.text.includes('\n') ? literalText(n.text) : n.text;
 }
 
@@ -138,7 +140,7 @@ function verbatimSlice(text, start, end, node) {
   const indentStr = /^[ \t]*/.exec(text.slice(ls, start))[0];
   const literal = (node && hasMultilineLeaf(node)) || lines.slice(1).some(l => l.trim() !== '' && !l.startsWith(indentStr));
   if (literal) return literalText(s);
-  return join(hardlineWithoutBreakParent, lines.map((l, i) => i === 0 ? l : l.trim() === '' ? '' : l.slice(indentStr.length)));
+  return join(hardline, lines.map((l, i) => i === 0 ? l : l.trim() === '' ? '' : l.slice(indentStr.length)));
 }
 
 /** Triple-quoted strings: shift all continuation lines uniformly (the value is unchanged). */
@@ -181,7 +183,7 @@ function printStatements(children, ctx, { top = false, keepEdgeBlank = false } =
     if (isWs(c)) { nl += countNl(c.text); continue; }
     if (isLeaf(c) && tok(c, ';')) { semi = true; continue; }
     if (isComment(c)) {
-      if (prev === null && nl === 0 && !top) { headerComments.push({ c, gap: gapBefore(ctx.text, c) }); prevEnd = c.end; continue; }
+      if (prev === null && nl === 0 && !top && !ownLine(ctx.text, c)) { headerComments.push({ c, gap: gapBefore(ctx.text, c) }); prevEnd = c.end; continue; }
       if (prev !== null && nl === 0 && prev.type === 'stmt') {
         prev.trailing.push({ c, gap: gapBefore(ctx.text, c) });
         prevEnd = c.end;
@@ -236,6 +238,8 @@ function flattenToplevel(children) {
   return out;
 }
 
+const ownLine = (text, c) => text.slice(lineStart(text, c.start), c.start).trim() === '';
+
 function gapBefore(text, c) {
   const ls = lineStart(text, c.start);
   const m = /[ \t]*$/.exec(text.slice(ls, c.start))[0];
@@ -257,7 +261,7 @@ function printOwnLineComment(c, ctx) {
  * `header` is printed before it; `endKw` after.
  */
 function blockBody(block, ctx, { endKw = 'end', keepEdgeBlank = false, noIndent = false, skipKw = [] } = {}) {
-  let kids = block ? block.children : [];
+  let kids = block ? (blockPre.get(block) ?? []).concat(block.children) : [];
   if (skipKw.length) kids = kids.filter(k => !(isLeaf(k) && isTriviaLeaf(k) && skipKw.includes(k.text)));
   const r = printStatements(kids, ctx, { keepEdgeBlank });
   const head = r.headerComments.map(trailingComment);
@@ -274,27 +278,55 @@ const CLOSERS = new Set([')', ']', '}', 'end']);
 
 /** All tokens in order; whitespace normalized; line breaks kept; continuation indented. */
 function printTokens(n, ctx) {
-  const first = [], rest = [];
-  let ws = null, prev = null, started = false, out = first;
+  const out = [];
+  let ws = '', prev = null;
   for (const c of n.children) {
-    if (isWs(c)) { ws = (ws ?? '') + c.text; continue; }
-    if (started) {
-      const nls = ws ? countNl(ws) : 0;
-      if (nls > 0 && !(prev && isLineComment(prev) && false)) {
-        out = rest;
-        const brk = nls >= 2 ? [hardline, hardline] : hardline;
-        if (isLeaf(c) && CLOSERS.has(c.text) && isTriviaLeaf(c)) out.push(dedent([brk, printTokLeaf(c, ctx)]));
-        else out.push(brk, printChild(c, n, ctx));
-        prev = c; ws = null; continue;
+    if (isWs(c)) { ws += c.text; continue; }
+    const gap = prev === null ? '' : ws + trailingWs(prev) + leadingWs(c);
+    const nls = countNl(gap);
+    if (!isLeaf(c) && c.kind === 'block' && !isKeywordBlock(c) && !c.children.some(k => kw(k, ','))) {
+      // a statement list inside a construct we don't know: one statement per line, indented
+      const r = printStatements(c.children, ctx);
+      if (prev !== null && !nls && !hasNewline(ctx.text, c.start, c.end)) {
+        out.push(gap ? ' ' : '', r.empty ? '' : r.doc);
+      } else {
+        out.push(r.headerComments.map(trailingComment), r.empty ? '' : indent([hardline, r.doc]));
+        prev = c; ws = '\n'; continue;
       }
-      out.push(spaceBetween(prev, c, ws, n, ctx));
-    } else if (prev === null && isLeaf(c) && isLineComment(c)) {
-      // a leading comment can't be first on a line it doesn't own; keep it as is
+      prev = c; ws = ''; continue;
     }
-    out.push(isLeaf(c) && isComment(c) && isLineComment(c) ? c.text.trimEnd() : printChild(c, n, ctx));
-    prev = c; ws = null; started = true;
+    if (prev !== null) {
+      if (nls > 0) {
+        const brk = nls >= 2 ? [hardline, hardline] : hardline;
+        if (isLeaf(c) && CLOSERS.has(c.text) && isTriviaLeaf(c)) out.push(brk, printLeaf(c, ctx));
+        else if (isComment(c)) out.push(indent([brk, printOwnLineComment(c, ctx)]));
+        else out.push(indent([brk, printChild(c, n, ctx)]));
+        prev = c; ws = ''; continue;
+      }
+      out.push(spaceBetween(prev, c, gap, n, ctx));
+    }
+    out.push(isLeaf(c) && isLineComment(c) ? [c.text.trimEnd(), breakParent] : printChild(c, n, ctx));
+    prev = c; ws = '';
   }
-  return rest.length ? [first, indent(rest)] : first;
+  return out;
+}
+
+const isKeywordBlock = b => { const { xs } = parts(b); return xs.length >= 2 && (kw(xs[0], 'begin') || kw(xs[0], 'quote')) && kw(xs.at(-1), 'end'); };
+
+function leadingWs(n) {
+  if (isLeaf(n) || !n.children.length) return '';
+  let s = '', i = 0;
+  while (i < n.children.length && isWs(n.children[i])) s += n.children[i++].text;
+  if (s || i >= n.children.length) return s;
+  return leadingWs(n.children[0]);
+}
+
+function trailingWs(n) {
+  if (isLeaf(n) || !n.children.length) return '';
+  let s = '', j = n.children.length - 1;
+  while (j >= 0 && isWs(n.children[j])) s = n.children[j--].text + s;
+  if (s || j < 0) return s;
+  return trailingWs(n.children.at(-1));
 }
 
 function printTokLeaf(c, ctx) { return printLeaf(c, ctx); }
@@ -319,14 +351,24 @@ const isMatrixKind = k => ['hcat', 'vcat', 'ncat', 'typed_hcat', 'typed_vcat', '
 
 // ─── Helpers for dedicated printers ────────────────────────────────────
 
-/** Non-whitespace children; comments are returned separately in order with their index. */
+/**
+ * Non-whitespace children; comments are returned separately in order with their index.
+ * Whitespace and comments right before a `block` child belong to that block's body
+ * (`blockBody` prints them) and are left out of `comments`.
+ */
+const blockPre = new WeakMap();
 function parts(n) {
   const xs = [], comments = [];
+  let pending = [], pendingComments = [];
   for (const c of n.children) {
-    if (isWs(c)) continue;
-    if (isComment(c)) { comments.push({ c, at: xs.length }); continue; }
+    if (isWs(c)) { pending.push(c); continue; }
+    if (isComment(c)) { pending.push(c); pendingComments.push({ c, at: xs.length }); continue; }
+    if (!isLeaf(c) && c.kind === 'block' && pendingComments.length) blockPre.set(c, pending);
+    else comments.push(...pendingComments);
+    pending = []; pendingComments = [];
     xs.push(c);
   }
+  comments.push(...pendingComments);
   return { xs, comments };
 }
 
@@ -360,6 +402,7 @@ const PRINTERS = {
   'doc': printDoc,
   'string': printString,
   'cmdstring': printString,
+  'char': (n, ctx) => printVerbatim(n, ctx),
   'macrocall': printMacrocall,
   'tuple': printTuple,
   'vect': (n, ctx) => printBracketList(n, ctx, '[', ']'),
@@ -484,13 +527,16 @@ function printIn(n, ctx) {
 function printLet(n, ctx) {
   const { xs, comments } = parts(n);
   if (!kw(xs[0], 'let') || !kw(xs.at(-1), 'end') || xs.length !== 4 || comments.length) return null;
-  const [_, binds, body] = xs;
+  const [, binds, body] = xs;
   if (binds.kind !== 'block' || body.kind !== 'block') return null;
   const bp = parts(binds);
-  if (bp.comments.length || binds.children.some(c => isWs(c) && c.text.includes('\n'))) return null;
-  const items = bp.xs.filter(x => !kw(x, ','));
+  if (bp.comments.length) return null;
   if (bp.xs.some(x => isLeaf(x) && isTriviaLeaf(x) && x.text !== ',')) return null;
-  const head = items.length ? ['let ', join(', ', items.map(x => print(x, ctx, binds)))] : 'let';
+  const items = bp.xs.filter(x => !kw(x, ','));
+  if (bp.xs.length !== 2 * items.length - 1 && items.length) return null;
+  const multi = binds.children.some(c => isWs(c) && c.text.includes('\n'));
+  const docs = items.map(x => print(x, ctx, binds));
+  const head = !items.length ? 'let' : multi ? ['let ', indent(join([',', hardline], docs))] : ['let ', join(', ', docs)];
   return [head, blockBody(body, ctx)];
 }
 
@@ -591,9 +637,12 @@ function printMacrocall(n, ctx) {
   // `@m a b`: arguments separated by single spaces; no optional line breaks at this level.
   const flat = sub(ctx, { flat: true });
   const out = [print(name, ctx, n)];
+  let prev = name;
   for (const a of xs.slice(1)) {
     if (isLeaf(a) && isTriviaLeaf(a)) return null;
-    out.push(' ', print(a, flat, n));
+    // `@NamedTuple{a::Int}` / `@m[1]`: no space where none was written
+    out.push(hasWsBetween(n, prev, a) ? ' ' : '', print(a, flat, n));
+    prev = a;
   }
   return out;
 }
@@ -666,7 +715,7 @@ function collectParams(p) {
 
 function printElem(e, ctx, parent) {
   const lead = e.lead.map(c => [printOwnLineComment(c), hardline]);
-  const trail = e.trailing.map(c => trailingComment({ c, gap: ' ' }));
+  const trail = e.trailing.map(c => trailingComment({ c, gap: gapBefore(TEXT, c) }));
   return { doc: [lead, print(e.n, ctx, parent)], trail };
 }
 
@@ -685,7 +734,8 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
     items.push([e.doc, last ? '' : ',', e.trail, last ? '' : line]);
   });
   const single = elems.length === 1 && !params;
-  const lastIsGenerator = L.elems.length && ['generator', 'flatten'].includes(L.elems.at(-1).n.kind) && !params;
+  const lastN = params ? L.params.elems.at(-1)?.n : L.elems.at(-1)?.n;
+  const lastIsGenerator = (lastN && ['generator', 'flatten'].includes(lastN.kind) && !params) || (lastN && endsOpen(lastN));
   let tail = '';
   if (forceComma && single) tail = ',';
   else if (!noTrailingComma && !lastIsGenerator && (elems.length || params?.length)) tail = ifBreak(',');
@@ -714,7 +764,36 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
   // A last parameter's trailing comment comes after the trailing comma.
   const dangling = L.dangling.map(c => [hardline, printOwnLineComment(c)]);
   const doc = group([L.open, indent([softline, content, tail, dangling]), softline, L.close]);
+  if (!hasComments && !params && elems.length > 1 && huggable(L.elems.at(-1).n, ctx, elems.at(-1).doc)
+      && !elems.slice(0, -1).some(e => docUtils.willBreak(e.doc))) {
+    // `f(a, b, [` … `])`: the last argument opens on the first line and closes the call
+    const hugged = [L.open, join(', ', elems.slice(0, -1).map(e => e.doc)), ', ', elems.at(-1).doc, L.close];
+    return [prefix, builders.conditionalGroup([hugged, doc]), printAfter(L, n, ctx)];
+  }
   return [prefix, hasComments ? [breakParent, doc] : doc, printAfter(L, n, ctx)];
+}
+
+const HUGGABLE = new Set(['vect', 'vcat', 'hcat', 'ncat', 'typed_vcat', 'typed_hcat', 'typed_ncat', 'comprehension', 'typed_comprehension', 'string', 'cmdstring', 'braces', 'tuple', 'function', 'macrocall', 'do', 'let', 'block', 'quote']);
+/** A last list element that spans lines and may open on the call's first line. */
+function huggable(n, ctx, doc = null) {
+  if (!hasNewline(ctx.text, n.start, n.end) && !(doc && docUtils.willBreak(doc))) return false;
+  if (ctx.protect.has(n)) return true;
+  if (n.kind === 'macrocall') return isStringMacro(n) || (!hasParen(n) && parts(n).xs.length === 2 && huggable(parts(n).xs[1], ctx));
+  if (n.kind === 'tuple') return parts(n).xs.length > 0 && kw(parts(n).xs[0], '(');
+  return HUGGABLE.has(n.kind);
+}
+
+const OPEN_ENDED = new Set(['return', 'continue', 'break', 'const', 'global', 'local']);
+/** Does the expression end in a form that a following `,` would extend (`@m a`, `return x`)? */
+function endsOpen(n) {
+  for (;;) {
+    if (isLeaf(n)) return OPEN_ENDED.has(n.text) && n.kind === n.text;
+    if (OPEN_ENDED.has(n.kind)) return true;
+    if (n.kind === 'macrocall' && !hasParen(n) && !isStringMacro(n)) return true;
+    const last = n.children.filter(c => !isWs(c) && !isComment(c)).at(-1);
+    if (!last || (isLeaf(last) && isTriviaLeaf(last))) return false;
+    n = last;
+  }
 }
 
 function printAfter(L, n, ctx) {
@@ -822,9 +901,10 @@ function printInfix(n, xs, comments, ctx) {
       if (!isLeaf(xs[i + 1])) return null;
       text = '.' + xs[i + 1].text; i++;
     }
+    const opAt = i;
     i++;
     if (i >= xs.length) return null;
-    ops.push({ text, at: i });
+    ops.push({ text, at: i, opAt });
     operands.push(xs[i++]);
   }
   if (!ops.length) return null;
@@ -835,7 +915,9 @@ function printInfix(n, xs, comments, ctx) {
   const inner = isRange ? sub(ctx, { compact: true }) : ctx;
   const docs = operands.map(o => print(o, inner, n));
   // Comments inside an infix expression: keep each one at the end of its line.
-  const cm = k => comments.filter(c => c.at === k).map(c => printCommentInline(c.c));
+  // comments before an operator (or between `.` and it) and right after it: at the operator
+  const cm = (lo, hi) => comments.filter(c => c.at > lo && c.at <= hi).map(c => printCommentInline(c.c));
+  if (comments.some(c => c.at > ops.at(-1).at)) return null;
   if (tight) {
     const out = [docs[0]];
     ops.forEach((o, k) => {
@@ -843,13 +925,17 @@ function printInfix(n, xs, comments, ctx) {
       const needSpace = OP_CHARS.test(ctx.text[r.start]) || /[+\-*/\\^%<>=!~&|:.]$/u.test(ctx.text.slice(l.start, l.end))
         || (opText === ':' && (ctx.text[r.start] === ':' || ctx.text[l.end - 1] === ':'));
       const sp = needSpace ? ' ' : '';
-      out.push(cm(o.at - 1), sp, o.text, sp, docs[k + 1], cm(o.at + 1));
+      out.push(sp, o.text, cm(o.opAt - 1, o.at), sp, docs[k + 1]);
     });
     return out;
   }
   // spaced, breakable after the operator
-  const rest = ops.map((o, k) => [' ', o.text, cm(o.at - 1), ln(ctx), docs[k + 1], cm(o.at + 1)]);
-  if (ctx.flat) return [docs[0], rest];
+  const lastOp = operands.at(-1);
+  // Never indent a part that will break without a line break before it (keeps verbatim
+  // regions and multi-line strings at a stable indentation).
+  const hugLast = (ops.length === 1 && !comments.length && huggable(lastOp, ctx, docs.at(-1))) || docs.slice(1).some(d => docUtils.willBreak(d));
+  const rest = ops.map((o, k) => [' ', o.text, cm(o.opAt - 1, o.at), hugLast ? ' ' : ln(ctx), docs[k + 1]]);
+  if (ctx.flat || hugLast) return [docs[0], rest];
   return group([docs[0], indent(rest)]);
 }
 
@@ -868,8 +954,8 @@ function printChain(n, ctx) {
   };
   if (!collect(n)) return null;
   const docs = operands.map(o => print(o.x, ctx, o.parent));
-  const rest = docs.slice(1).map(d => [' ', op, ln(ctx), d]);
-  if (ctx.flat) return [docs[0], rest];
+  if (ctx.flat || docs.slice(1).some(d => docUtils.willBreak(d))) return [docs[0], docs.slice(1).map(d => [' ', op, ' ', d])];
+  const rest = docs.slice(1).map(d => [' ', op, line, d]);
   return group([docs[0], indent(rest)]);
 }
 
@@ -891,8 +977,9 @@ function printTernary(n, ctx) {
   const { xs, comments } = parts(n);
   if (comments.length || xs.length !== 5 || !kw(xs[1], '?') || !kw(xs[3], ':')) return null;
   const [c, , a, , b] = xs;
-  const d = [print(c, ctx, n), ' ?', ln(ctx), print(a, ctx, n), ' :', ln(ctx), print(b, ctx, n)];
-  return ctx.flat ? d : group(indent(d));
+  const [dc, da, db] = [print(c, ctx, n), print(a, ctx, n), print(b, ctx, n)];
+  if (ctx.flat || [da, db].some(d => docUtils.willBreak(d))) return [dc, ' ? ', da, ' : ', db];
+  return group([dc, indent([' ?', line, da, ' :', line, db])]);
 }
 
 /** `x::T`, `a.b`, `x...`: no spaces (as Runic). */
@@ -927,8 +1014,14 @@ function printAssignment(n, ctx) {
   if (opToks.some(t => !isLeaf(t))) return null;
   const op = opToks.map(t => t.text).join('');
   const lhsDoc = print(lhs, ctx, n);
-  if (op === '=' && ctx.parent && KWARG_PARENTS.has(ctx.parent.kind) && !(ctx.parent.kind === 'macrocall' && !flag(ctx.parent, 0x100) && !hasParen(ctx.parent))) {
-    return [lhsDoc, '=', print(rhs, ctx, n)];
+  if (ctx.parent && ctx.parent.kind === 'macrocall' && !hasParen(ctx.parent)) {
+    // `@m a = b` / `@kw x=1`: keep the spacing as written
+    const sp = hasWsBetween(n, lhs, opToks[0]) || hasWsBetween(n, opToks.at(-1), rhs) ? ' ' : '';
+    return [lhsDoc, sp, op, sp, print(rhs, ctx, n)];
+  }
+  if (op === '=' && ctx.parent && KWARG_PARENTS.has(ctx.parent.kind)) {
+    const glue = /[!<>=:~+\-*\/\\^%&|.$']$/.test(ctx.text.slice(lhs.start, lhs.end)) || /^[=>:]/.test(ctx.text[rhs.start]);
+    return glue ? [lhsDoc, ' = ', print(rhs, ctx, n)] : [lhsDoc, '=', print(rhs, ctx, n)];
   }
   return assignmentLayout(lhsDoc, op, rhs, ctx, n);
 }

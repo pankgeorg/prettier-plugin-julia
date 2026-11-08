@@ -87,8 +87,9 @@ export function verify(input, output) {
   const b = parseTree(output);
   if (hasErrors(b)) {
     const d = b.diagnostics.find(isErrorDiagnostic);
-    // Map the output error to the input statement at the same ordinal position, if we can.
-    return { message: `output does not parse: ${d.message} (output ${d.loc.line}:${d.loc.column + 1})`, node: null, outputError: d };
+    // Locate it in the input through the first difference of the (error-recovered) trees.
+    const diff = firstDifference(semTree(input.root), semTree(b.root), null);
+    return { message: `output does not parse: ${d.message} (output ${d.loc.line}:${d.loc.column + 1})`, node: diff?.node ?? null };
   }
   const d = firstDifference(semTree(input.root), semTree(b.root), null);
   if (d) return d;
