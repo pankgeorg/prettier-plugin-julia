@@ -118,7 +118,7 @@ the same JuliaSyntax normal form:
 |---|---|---|---|
 | Files left unchanged | 31 | 88 | 38 |
 | Output parses to the same tree | 300 | 146 | 233 |
-| Time, 4.4 MB, warm | 6.7 s (1.5 s/MB, incl. verification) | 3.9 s | 1.6 s |
+| Time, 4.4 MB, warm | 5.7 s (1.3 s/MB with verification, 0.9 without) | 3.9 s | 1.6 s |
 | Start-up + tiny file | 0.22 s | 0.27 s | 0.52 s |
 
 Runic and JuliaFormatter change trees on purpose: Runic adds explicit `return`s, braces in
@@ -150,3 +150,21 @@ node scripts/corpus-summary.mjs out.jsonl  # summary
 
 MIT. `wasm/parser.wasm` contains code from Julia and JuliaSyntax (MIT) and WasmCodegen.jl
 (MIT); see `wasm/LICENSES/`.
+
+### Where the time goes
+
+Warm, 300-file sample, `node scripts/bench.mjs LIST` (s/MB):
+
+| Stage | s/MB | % |
+|---|---:|---:|
+| JuliaSyntax parse (Wasm `parse_src`) | 0.15 | 11 |
+| Copying source in and the tree out of Wasm | 0.09 | 7 |
+| Tree building, trivia hoisting | 0.14 | 10 |
+| Doc building (this printer) | 0.24 | 18 |
+| Line fitting (Prettier's `printDocToString`) | 0.27 | 21 |
+| Verification: parsing the output | 0.24 | 19 |
+| Verification: tree building and comparison | 0.17 | 13 |
+| **Total** | **1.31** | |
+
+With `juliaVerify: false` it's 0.89 s/MB. The parser itself is under a fifth of the time;
+a WasmCodegen build with its pending optimizations gave the same parse speed.
