@@ -99,7 +99,7 @@ tests, and the packages of several Julia depots, deduplicated by content. Arm64 
 | Formatted and verified | 25,163 (3,267 already formatted) |
 | Rejected by JuliaSyntax (not valid Julia 1.13) | 11 |
 | Regions kept as written / whole files kept / crashes | 0 / 0 / 0 |
-| Not idempotent (formatting twice ≠ once) | 4 before the last fixes; 1 known (a multi-line matrix with `#==#` comments inside `@test` in Julia's own `test/syntax.jl`) |
+| Not idempotent (formatting twice ≠ once) | 0 |
 | Time | 2.1 s/MB per worker, verification included; median 4 ms per file |
 | CLI latency, small file | 0.22 s (`node …/prettier.cjs`), 0.6 s through `npx` |
 
