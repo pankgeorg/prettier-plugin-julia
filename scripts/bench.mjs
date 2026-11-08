@@ -5,6 +5,7 @@
 // tree (placement, UTF-16 offsets, node objects, trivia hoisting), print (doc building),
 // render (Prettier's line fitting), verify (output parse + normal forms + comparison).
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createWasmHost } from '../src/parser/wasm-host.js';
 import { parseTree, setReader } from '../src/tree.js';
 import { normalizeTree, printJulia } from '../src/printer.js';
@@ -16,7 +17,7 @@ const opt = (name, d) => {
   const i = args.indexOf(name);
   return i >= 0 ? args.splice(i, 2)[1] : d;
 };
-const wasmPath = opt('--wasm', new URL('../wasm/parser.wasm', import.meta.url).pathname);
+const wasmPath = opt('--wasm', fileURLToPath(new URL('../wasm/parser.wasm', import.meta.url)));
 const runs = Number(opt('--runs', 3));
 const file = opt('--file', null);
 const other = opt('--same-trees', null);

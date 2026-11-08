@@ -2,12 +2,13 @@
 // usage: node scripts/check-vendored.mjs PATH/TO/eslint-plugin-julia
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 const up = process.argv[2];
 if (!up) {
   console.error('usage: node scripts/check-vendored.mjs PATH/TO/eslint-plugin-julia');
   process.exit(2);
 }
-const here = new URL('..', import.meta.url).pathname;
+const here = fileURLToPath(new URL('..', import.meta.url));
 const pairs = [
   ...['wasm-host.js', 'green-tree.js', 'positions.js', 'flags.js'].map((f) => [`src/parser/${f}`, `src/parser/${f}`]),
   ['wasm/parser.wasm', 'wasm/parser.wasm'],
