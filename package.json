@@ -1,0 +1,20 @@
+{
+  "name": "prettier-plugin-julia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prettier plugin for Julia, using Julia's own parser (JuliaSyntax) compiled to WebAssembly; every format is verified to keep the program's meaning",
+  "type": "module",
+  "license": "MIT",
+  "author": "Panagiotis Georgakopoulos",
+  "keywords": ["prettier", "prettier-plugin", "julia", "formatter", "juliasyntax", "webassembly"],
+  "engines": { "node": ">=22.12" },
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "files": ["src/", "wasm/", "scripts/parser/", "README.md", "LICENSE", "ECOSYSTEM.md"],
+  "peerDependencies": { "prettier": "^3.0.0" },
+  "devDependencies": { "prettier": "3.9.10" },
+  "scripts": {
+    "test": "node --test tests/",
+    "corpus": "node scripts/corpus.mjs"
+  }
+}

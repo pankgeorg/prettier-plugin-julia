@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "sha256": "08b1b81beac1f8a5aa7b4467bd5a1024f99f32cf03c1f33f7fca81a556fe8859",
+  "bytes": 735576,
+  "sources": {
+    "parser": "https://github.com/pankgeorg/topiary-julia/blob/main/jlparse/parser.jl",
+    "build": "https://github.com/pankgeorg/topiary-julia/blob/main/jlparse/build.jl",
+    "snapshot": "scripts/parser.jl and scripts/build-parser.jl (vendored artifact inputs)"
+  },
+  "versions": {
+    "julia": "1.13.2",
+    "juliaSyntax": "Base.JuliaSyntax shipped in Julia 1.13.2",
+    "wasmCodegenCommit": "316bbaf",
+    "wasmOpt": "-O3; executable version not recorded"
+  },
+  "abi": {
+    "version": 1,
+    "exports": [
+      "src_resize",
+      "src_set",
+      "src_set4",
+      "parse_src",
+      "out_kind",
+      "out_span",
+      "out_nodespan",
+      "out_flags",
+      "out_class",
+      "ndiag",
+      "diag_first",
+      "diag_last",
+      "diag_level",
+      "diag_msg_len",
+      "diag_msg_byte",
+      "kind_name_len",
+      "kind_name_byte"
+    ]
+  },
+  "reference": "tests/fixtures/jlparse_reference.json; 21 native JuliaSyntax sources, 76494 nodes",
+  "notes": [
+    "Requires Wasm GC and exception handling; no imports.",
+    "Source snapshots are authoritative for this artifact; original topiary-julia commit was not recorded."
+  ]
+}
