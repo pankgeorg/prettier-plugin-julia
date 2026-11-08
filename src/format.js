@@ -2,7 +2,7 @@
 // (print it verbatim) and try again; after MAX_ROUNDS, keep the whole file as written.
 import { printer as docPrinter } from 'prettier/doc';
 import { parseTree, hasErrors, isErrorDiagnostic } from './tree.js';
-import { normalizeTree, printJulia } from './printer.js';
+import { normalizeTree, parentsOf, printJulia } from './printer.js';
 import { verify } from './verify.js';
 
 const MAX_ROUNDS = 30;
@@ -19,8 +19,8 @@ export class JuliaSyntaxError extends SyntaxError {
 export function parseForFormat(text) {
   const tree = parseTree(text);
   if (hasErrors(tree)) throw new JuliaSyntaxError(tree.diagnostics.find(isErrorDiagnostic));
-  const parents = normalizeTree(tree.root);
-  return { tree, parents, text };
+  normalizeTree(tree.root);
+  return { tree, text };
 }
 
 export function render(doc, options) {
@@ -37,7 +37,9 @@ export function render(doc, options) {
  *   `whole` is the reason when the whole file was kept as written.
  */
 export function formatParsed(parsed, options = {}, hooks = {}) {
-  const { tree, parents, text } = parsed;
+  const { tree, text } = parsed;
+  let parentMap = null;
+  const parents = { get: n => (parentMap ??= parentsOf(tree.root)).get(n) };
   const protect = new Set();
   const reasons = new Map();
   const doVerify = options.juliaVerify !== false;

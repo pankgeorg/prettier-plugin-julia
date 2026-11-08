@@ -10,8 +10,30 @@
 // after `(`/`[`/`{` and commas inside brackets, after binary and assignment operators
 // outside space-sensitive contexts (matrix rows, macro arguments), and between statements.
 import { builders } from 'prettier/doc';
-import { utils as docUtils } from 'prettier/doc';
+import { utils as prettierDocUtils } from 'prettier/doc';
 import { CLASS } from './tree.js';
+
+// Prettier's willBreak walks the whole sub-doc on every call; the printer asks it at every
+// level, so memoize per doc object (docs are never mutated after construction).
+const breakMemo = new WeakMap();
+function willBreak(d) {
+  if (typeof d === 'string' || d === null || d === undefined) return false;
+  const m = breakMemo.get(d);
+  if (m !== undefined) return m;
+  let r;
+  if (Array.isArray(d)) r = d.some(willBreak);
+  else switch (d.type) {
+    case 'line': r = Boolean(d.hard); break;
+    case 'break-parent': r = true; break;
+    case 'group': r = Boolean(d.break) || willBreak(d.contents) || (d.expandedStates ? d.expandedStates.some(willBreak) : false); break;
+    case 'if-break': r = willBreak(d.breakContents) || willBreak(d.flatContents); break;
+    case 'fill': r = willBreak(d.parts); break;
+    default: r = d.contents !== undefined ? willBreak(d.contents) : false;
+  }
+  breakMemo.set(d, r);
+  return r;
+}
+const docUtils = { willBreak, removeLines: prettierDocUtils.removeLines };
 
 const { group, indent, dedent, line, softline, hardline, join, ifBreak, lineSuffix, breakParent,
   indentIfBreak, hardlineWithoutBreakParent, literallineWithoutBreakParent } = builders;
@@ -38,35 +60,41 @@ const isNumber = n => isLeaf(n) && ['Integer', 'Float', 'Float32', 'BinInt', 'He
  * Also records parents (for escalating protected regions).
  */
 export function normalizeTree(root) {
-  const parents = new Map();
+  const edge = k => isWs(k) || isComment(k);
+  const hoistable = c => !(isLeaf(c) || STATEMENT_LISTS.has(c.kind) || VERBATIM_KINDS.has(c.kind) || isStringMacro(c))
+    && c.children.length > 0 && (edge(c.children[0]) || edge(c.children.at(-1)));
   const visit = n => {
     if (isLeaf(n)) return;
-    for (const c of n.children) { parents.set(c, n); visit(c); }
-    if (VERBATIM_KINDS.has(n.kind) || isStringMacro(n)) return;
+    for (const c of n.children) visit(c);
+    if (VERBATIM_KINDS.has(n.kind) || isStringMacro(n) || !n.children.some(hoistable)) return;
     const out = [];
     for (const c of n.children) {
-      if (isLeaf(c) || STATEMENT_LISTS.has(c.kind) || VERBATIM_KINDS.has(c.kind) || isStringMacro(c)) { out.push(c); continue; }
+      if (!hoistable(c)) { out.push(c); continue; }
       let i = 0, j = c.children.length;
-      while (i < j && (isWs(c.children[i]) || isComment(c.children[i]))) i++;
-      while (j > i && (isWs(c.children[j - 1]) || isComment(c.children[j - 1]))) j--;
+      while (i < j && edge(c.children[i])) i++;
+      while (j > i && edge(c.children[j - 1])) j--;
       if (i === j) {
         // only whitespace/comments inside (`do  # c` puts them in an empty tuple): hoist all
         const t = c.children;
-        if (t.some(isComment)) { c.children = []; c.end = c.start; for (const k of t) parents.set(k, n); out.push(...t, c); }
+        if (t.some(isComment)) { c.children = []; c.end = c.start; out.push(...t, c); }
         else out.push(c);
         continue;
       }
       const lead = c.children.slice(0, i), trail = c.children.slice(j);
-      if (lead.length || trail.length) {
-        c.children = c.children.slice(i, j);
-        c.start = c.children[0].start; c.end = c.children.at(-1).end;
-        for (const t of lead.concat(trail)) parents.set(t, n);
-      }
+      c.children = c.children.slice(i, j);
+      c.start = c.children[0].start; c.end = c.children.at(-1).end;
       out.push(...lead, c, ...trail);
     }
     n.children = out;
   };
   visit(root);
+}
+
+/** Parent of every node (only needed when a region must be protected). */
+export function parentsOf(root) {
+  const parents = new Map();
+  const walk = n => { if (!isLeaf(n)) for (const c of n.children) { parents.set(c, n); walk(c); } };
+  walk(root);
   return parents;
 }
 
