@@ -35,8 +35,8 @@ function willBreak(d) {
 }
 const docUtils = { willBreak, removeLines: prettierDocUtils.removeLines };
 
-const { group, indent, dedent, line, softline, hardline, join, ifBreak, lineSuffix, breakParent,
-  indentIfBreak, hardlineWithoutBreakParent, literallineWithoutBreakParent } = builders;
+const { group, indent, line, softline, hardline, join, ifBreak, lineSuffix, breakParent,
+  indentIfBreak, hardlineWithoutBreakParent } = builders;
 
 // ─── Tree helpers ──────────────────────────────────────────────────────
 
@@ -253,7 +253,7 @@ const ON_RE = /^#!\s*format\s*:\s*on\b/;
  */
 function printStatements(children, ctx, { top = false, keepEdgeBlank = false } = {}) {
   const items = [];
-  let nl = 0, semi = false, prev = null, prevEnd = null;
+  let nl = 0, semi = false, prev = null;
   const headerComments = [];
   let ignoreNext = false;
   const kids = flattenToplevel(children);
@@ -262,10 +262,9 @@ function printStatements(children, ctx, { top = false, keepEdgeBlank = false } =
     if (isWs(c)) { nl += countNl(c.text); continue; }
     if (isLeaf(c) && tok(c, ';')) { semi = true; continue; }
     if (isComment(c)) {
-      if (prev === null && nl === 0 && !top && !ownLine(ctx.text, c)) { headerComments.push({ c, gap: gapBefore(ctx.text, c) }); prevEnd = c.end; continue; }
+      if (prev === null && nl === 0 && !top && !ownLine(ctx.text, c)) { headerComments.push({ c, gap: gapBefore(ctx.text, c) }); continue; }
       if (prev !== null && nl === 0 && prev.type === 'stmt') {
         prev.trailing.push({ c, gap: gapBefore(ctx.text, c) });
-        prevEnd = c.end;
         continue;
       }
       if (OFF_RE.test(c.text)) {
@@ -298,7 +297,7 @@ function printStatements(children, ctx, { top = false, keepEdgeBlank = false } =
   items.forEach((it, i) => {
     if (i > 0) parts.push(it.sameLine ? '; ' : it.blank ? [hardline, hardline] : hardline);
     else if (it.blank && keepEdgeBlank) parts.push(hardline);
-    if (it.type === 'comment') parts.push(printOwnLineComment(it.c, ctx));
+    if (it.type === 'comment') parts.push(printOwnLineComment(it.c));
     else if (it.type === 'raw') parts.push(it.doc);
     else parts.push(it.ignore ? printVerbatim(it.n, ctx) : print(it.n, sub(ctx, { flat: false, compact: false }), null));
     for (const t of it.trailing) parts.push(trailingComment(t));
@@ -330,7 +329,7 @@ function trailingComment({ c, gap }) {
   return [' ', c.text.includes('\n') ? literalText(c.text) : c.text];
 }
 
-function printOwnLineComment(c, ctx) {
+function printOwnLineComment(c) {
   const t = c.text.trimEnd();
   return t.includes('\n') ? literalText(t) : t;
 }
@@ -383,11 +382,11 @@ function printTokens(n, ctx) {
       if (nls > 0) {
         const brk = nls >= 2 ? [hardline, hardline] : hardline;
         if (isLeaf(c) && CLOSERS.has(c.text) && isTriviaLeaf(c)) out.push(brk, printLeaf(c, ctx));
-        else if (isComment(c)) out.push(indent([brk, printOwnLineComment(c, ctx)]));
+        else if (isComment(c)) out.push(indent([brk, printOwnLineComment(c)]));
         else out.push(indent([brk, printChild(c, n, ctx)]));
         prev = c; ws = ''; continue;
       }
-      out.push(spaceBetween(prev, c, gap, n, ctx));
+      out.push(spaceBetween(prev, c, gap));
     }
     out.push(isLeaf(c) && isLineComment(c) ? [c.text.trimEnd(), breakParent] : printChild(c, n, ctx));
     prev = c; ws = '';
@@ -413,15 +412,13 @@ function trailingWs(n) {
   return trailingWs(n.children.at(-1));
 }
 
-function printTokLeaf(c, ctx) { return printLeaf(c, ctx); }
-
 function printChild(c, parent, ctx) {
   if (isLeaf(c)) return ctx.protect.has(c) ? printVerbatim(c, ctx) : printLeaf(c, ctx);
   const opensBracket = parent.children.some(k => isLeaf(k) && isTriviaLeaf(k) && OPENERS.has(k.text));
   return print(c, opensBracket && !isMatrixKind(parent.kind) ? sub(ctx, { flat: false }) : ctx, parent);
 }
 
-function spaceBetween(prev, c, ws, parent, ctx) {
+function spaceBetween(prev, c, ws) {
   const pt = isLeaf(prev) ? prev.text : null, ct = isLeaf(c) ? c.text : null;
   if (ct === ',' || ct === ';') return '';
   if (pt === ',' ) return ' ';
@@ -462,7 +459,6 @@ const commentsAt = (comments, at) => commentGroup(comments.filter(k => k.at === 
 const kw = (n, text) => isLeaf(n) && isTriviaLeaf(n) && n.text === text;
 
 const ln = ctx => ctx.flat ? ' ' : line;
-const sln = ctx => ctx.flat ? '' : softline;
 
 // ─── Blocks and keyword constructs ─────────────────────────────────────
 
@@ -797,7 +793,7 @@ function collectList(n, openIdx) {
 function collectParams(p) {
   const kids = p.children;
   const elems = [];
-  let lead = [], lastSep = null, nlSince = false, seenSemi = false;
+  let lead = [], nlSince = false, seenSemi = false;
   const semiTrail = [];
   for (const c of kids) {
     if (isWs(c)) { if (c.text.includes('\n')) nlSince = true; continue; }
@@ -808,10 +804,10 @@ function collectParams(p) {
       continue;
     }
     nlSince = false;
-    if (kw(c, ';')) { if (seenSemi) return null; seenSemi = true; lastSep = ';'; continue; }
-    if (kw(c, ',')) { lastSep = ','; continue; }
+    if (kw(c, ';')) { if (seenSemi) return null; seenSemi = true; continue; }
+    if (kw(c, ',')) continue;
     if (isLeaf(c) && isTriviaLeaf(c)) return null;
-    elems.push({ n: c, lead, trailing: [] }); lead = []; lastSep = 'elem';
+    elems.push({ n: c, lead, trailing: [] }); lead = [];
   }
   if (!seenSemi) return null;
   if (lead.length) { if (!elems.length) return null; elems.at(-1).trailing.push(...lead); }
@@ -828,7 +824,7 @@ function printElem(e, ctx, parent) {
  * Print `open elems ; params close` after `prefix`, breaking one element per line with a
  * trailing comma when it doesn't fit.
  */
-function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma = false } = {}) {
+function printListBody(L, n, ctx, prefix, { noTrailingComma = false } = {}) {
   const inner = sub(ctx, { flat: false, compact: false });
   const elems = L.elems.map(e => printElem(e, inner, n));
   const params = L.params ? L.params.elems.map(e => printElem(e, inner, n)) : null;
@@ -972,7 +968,7 @@ function hasWsBetween(n, a, b) {
 
 function printTuple(n, ctx) {
   const { xs, comments } = parts(n);
-  if (xs.length && kw(xs[0], '(')) return printListAfter(n, ctx, 0, '', { forceComma: true });
+  if (xs.length && kw(xs[0], '(')) return printListAfter(n, ctx, 0, '');
   // bare tuple `a, b` (assignment sides, `return a, b`, `for (a, b) in …` handled above)
   if (comments.length) return null;
   const items = [];
@@ -1176,7 +1172,7 @@ function printAssignment(n, ctx) {
     return [lhsDoc, sp, op, sp, print(rhs, ctx, n)];
   }
   if (op === '=' && ctx.parent && KWARG_PARENTS.has(ctx.parent.kind)) {
-    const glue = /[!<>=:~+\-*\/\\^%&|.$']$/.test(ctx.text.slice(lhs.start, lhs.end)) || /^[=>:]/.test(ctx.text[rhs.start]);
+    const glue = /[!<>=:~+\-*/\\^%&|.$']$/.test(ctx.text.slice(lhs.start, lhs.end)) || /^[=>:]/.test(ctx.text[rhs.start]);
     return glue ? [lhsDoc, ' = ', print(rhs, ctx, n)] : [lhsDoc, '=', print(rhs, ctx, n)];
   }
   return assignmentLayout(lhsDoc, op, rhs, ctx, n);

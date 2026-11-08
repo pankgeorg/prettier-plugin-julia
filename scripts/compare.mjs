@@ -30,12 +30,12 @@ for (const tool of tools) {
   for (const e of examples) console.log('   e.g.', e);
 }
 // the plugin itself, sequentially, same files, for timing
-let ms = 0, bytes = 0;
+let bytes = 0;
 const t0 = performance.now();
 for (const f of files) {
   const input = readFileSync(f, 'utf8').replace(/\r\n?/g, '\n');
   bytes += Buffer.byteLength(input);
-  try { formatJulia(input); } catch {}
+  try { formatJulia(input); } catch { /* syntax error: nothing to time */ }
 }
-ms = performance.now() - t0;
+const ms = performance.now() - t0;
 console.log(`\nprettier-plugin-julia (sequential, one process, verification included): ${(ms / 1000).toFixed(2)} s for ${(bytes / 1e6).toFixed(1)} MB`);

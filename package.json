@@ -34,10 +34,17 @@
     "prettier": "^3.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-n": "^18.5.0",
+    "globals": "^17.14.0",
     "prettier": "3.9.10"
   },
   "scripts": {
     "test": "node scripts/check-artifact.mjs && node --test tests/*.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "corpus": "node scripts/corpus.mjs",
     "corpus:summary": "node scripts/corpus-summary.mjs"
   },
