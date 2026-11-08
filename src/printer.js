@@ -49,7 +49,13 @@ export function normalizeTree(root) {
       let i = 0, j = c.children.length;
       while (i < j && (isWs(c.children[i]) || isComment(c.children[i]))) i++;
       while (j > i && (isWs(c.children[j - 1]) || isComment(c.children[j - 1]))) j--;
-      if (i === j) { out.push(c); continue; }
+      if (i === j) {
+        // only whitespace/comments inside (`do  # c` puts them in an empty tuple): hoist all
+        const t = c.children;
+        if (t.some(isComment)) { c.children = []; c.end = c.start; for (const k of t) parents.set(k, n); out.push(...t, c); }
+        else out.push(c);
+        continue;
+      }
       const lead = c.children.slice(0, i), trail = c.children.slice(j);
       if (lead.length || trail.length) {
         c.children = c.children.slice(i, j);
@@ -76,9 +82,9 @@ function isStringMacro(n) {
  * @param text   the source
  * @param protect Set of nodes to print verbatim
  */
-export function printJulia(tree, text, protect = new Set()) {
+export function printJulia(tree, text, protect = new Set(), mutate = null) {
   TEXT = text;
-  const ctx = { text, protect, flat: false, compact: false, parent: null };
+  const ctx = { text, protect, flat: false, compact: false, parent: null, mutate };
   const { doc, empty } = printStatements(tree.root.children, ctx, { top: true });
   return empty ? '' : [doc, hardline];
 }
@@ -86,6 +92,15 @@ export function printJulia(tree, text, protect = new Set()) {
 const sub = (ctx, patch) => ({ ...ctx, ...patch });
 
 function print(n, ctx, parent = null) {
+  if (ctx.mutate && !ctx.protect.has(n)) {
+    // test hook: a deliberately wrong printer for some nodes
+    const d = ctx.mutate(n, ctx.text);
+    if (d !== undefined) return d;
+  }
+  return print1(n, ctx, parent);
+}
+
+function print1(n, ctx, parent) {
   const c = parent === ctx.parent ? ctx : sub(ctx, { parent });
   if (ctx.protect.has(n)) return printVerbatim(n, ctx);
   if (isLeaf(n)) return printLeaf(n, ctx);
@@ -93,6 +108,11 @@ function print(n, ctx, parent = null) {
   if (f) {
     const d = f(n, c);
     if (d !== null && d !== undefined) return d;
+  }
+  if (n.kind === 'comparison') {
+    const { xs, comments } = parts(n);
+    const d = printInfix(n, xs, comments, c);
+    if (d) return d;
   }
   if (n.kind === 'call' || n.kind === 'dotcall') {
     const d = printCall(n, c);
@@ -108,6 +128,15 @@ function printLeaf(n, ctx) {
 }
 
 let TEXT = '';
+/** Comments inside an expression: all at the end of the current line, one per line, in order. */
+function commentGroup(cs) {
+  if (!cs.length) return '';
+  const texts = cs.map(c => c.text.trimEnd());
+  if (cs.length === 1 && !isLineComment(cs[0]) && !texts[0].includes('\n')) return [' ', texts[0], ' '];
+  const body = [gapBefore(TEXT, cs[0])];
+  texts.forEach((t, i) => { if (i) body.push(hardlineWithoutBreakParent); body.push(t.includes('\n') ? literalText(t) : t); });
+  return [lineSuffix(body), breakParent];
+}
 function printCommentInline(n) {
   if (isLineComment(n)) return [lineSuffix(gapBefore(TEXT, n) + n.text.trimEnd()), breakParent];
   return n.text.includes('\n') ? literalText(n.text) : n.text;
@@ -143,22 +172,20 @@ function verbatimSlice(text, start, end, node) {
   return join(hardline, lines.map((l, i) => i === 0 ? l : l.trim() === '' ? '' : l.slice(indentStr.length)));
 }
 
-/** Triple-quoted strings: shift all continuation lines uniformly (the value is unchanged). */
+/**
+ * Triple-quoted strings: all continuation lines move with the line the string starts on
+ * (a uniform shift keeps the value: JuliaSyntax removes the common indentation). Other
+ * multi-line strings are printed exactly as written.
+ */
 function printString(n, ctx) {
   const s = ctx.text.slice(n.start, n.end);
   if (!s.includes('\n')) return s;
   const triple = flag(n, 0x100) || (isStringMacro(n) && n.children.some(c => !isLeaf(c) && flag(c, 0x100)));
   const lines = s.split('\n');
   if (!triple || lines.some(l => /[ \t]$/.test(l))) return literalText(s);
-  const rest = lines.slice(1).filter(l => l.trim() !== '');
-  let prefix = null;
-  for (const l of rest) {
-    const ws = /^[ \t]*/.exec(l)[0];
-    if (prefix === null) prefix = ws;
-    else { let k = 0; while (k < prefix.length && k < ws.length && prefix[k] === ws[k]) k++; prefix = prefix.slice(0, k); }
-  }
-  prefix ??= '';
-  return join(hardlineWithoutBreakParent, lines.map((l, i) => i === 0 ? l : l.trim() === '' ? '' : l.slice(prefix.length)));
+  const indentStr = /^[ \t]*/.exec(ctx.text.slice(lineStart(ctx.text, n.start), n.start))[0];
+  if (lines.slice(1).some(l => l !== '' && !l.startsWith(indentStr))) return literalText(s);
+  return join(hardline, lines.map((l, i) => i === 0 ? l : l.slice(indentStr.length)));
 }
 
 // ─── Statement lists ───────────────────────────────────────────────────
@@ -284,7 +311,7 @@ function printTokens(n, ctx) {
     if (isWs(c)) { ws += c.text; continue; }
     const gap = prev === null ? '' : ws + trailingWs(prev) + leadingWs(c);
     const nls = countNl(gap);
-    if (!isLeaf(c) && c.kind === 'block' && !isKeywordBlock(c) && !c.children.some(k => kw(k, ','))) {
+    if (!isLeaf(c) && c.kind === 'block' && !isKeywordBlock(c) && !c.children.some(k => kw(k, ',') || kw(k, '('))) {
       // a statement list inside a construct we don't know: one statement per line, indented
       const r = printStatements(c.children, ctx);
       if (prev !== null && !nls && !hasNewline(ctx.text, c.start, c.end)) {
@@ -373,7 +400,7 @@ function parts(n) {
 }
 
 /** Comments that end up at index `at` (before xs[at]) as line suffixes. */
-const commentsAt = (comments, at) => comments.filter(k => k.at === at).map(k => printCommentInline(k.c));
+const commentsAt = (comments, at) => commentGroup(comments.filter(k => k.at === at).map(k => k.c));
 
 const kw = (n, text) => isLeaf(n) && isTriviaLeaf(n) && n.text === text;
 
@@ -478,7 +505,7 @@ function printFunction(n, ctx) {
   const block = xs.at(-2);
   if (block.kind !== 'block' || xs.length !== 4) return null;
   if (comments.some(k => k.at !== 3 && k.at !== 2)) return null;
-  return [word, ' ', print(xs[1], ctx, n), comments.map(k => printCommentInline(k.c)), blockBody(block, ctx)];
+  return [word, ' ', print(xs[1], ctx, n), commentGroup(comments.map(k => k.c)), blockBody(block, ctx)];
 }
 
 function printIf(n, ctx) {
@@ -491,7 +518,7 @@ function printIf(n, ctx) {
     if (!kw(xs[0], word)) return null;
     const cond = xs[1], block = xs[2];
     if (!block || block.kind !== 'block') return null;
-    out.push(word, ' ', print(cond, ctx, cur), comments.map(k => printCommentInline(k.c)), blockBody(block, ctx, { endKw: null }));
+    out.push(word, ' ', print(cond, ctx, cur), commentGroup(comments.map(k => k.c)), blockBody(block, ctx, { endKw: null }));
     let i = 3;
     const next = xs[i];
     if (next && !isLeaf(next) && next.kind === 'elseif') { out.push(hardline); cur = next; first = false; continue; }
@@ -513,7 +540,7 @@ function printFor(n, ctx) {
   const { xs, comments } = parts(n);
   if (!kw(xs[0], 'for') || !kw(xs.at(-1), 'end') || xs.length !== 4 || xs[2].kind !== 'block') return null;
   if (comments.some(k => k.at !== 2 && k.at !== 3)) return null;
-  return ['for ', print(xs[1], ctx, n), comments.map(k => printCommentInline(k.c)), blockBody(xs[2], ctx)];
+  return ['for ', print(xs[1], ctx, n), commentGroup(comments.map(k => k.c)), blockBody(xs[2], ctx)];
 }
 
 /** `i in x`, `i = x`, `i ∈ x` in iterations; `=` becomes `in` (Runic does the same). */
@@ -551,7 +578,7 @@ function printTry(n, ctx) {
       if (p.comments.some(k => k.at !== 2 && k.at !== 3) || !kw(p.xs[0], 'catch') || p.xs.length !== 3 || p.xs[2].kind !== 'block') return null;
       const v = p.xs[1];
       const hasVar = !(isLeaf(v) && v.kind === 'Placeholder' && v.text === '');
-      out.push(hardline, 'catch', hasVar ? [' ', print(v, ctx, x)] : '', p.comments.map(k => printCommentInline(k.c)), blockBody(p.xs[2], ctx, { endKw: null }));
+      out.push(hardline, 'catch', hasVar ? [' ', print(v, ctx, x)] : '', commentGroup(p.comments.map(k => k.c)), blockBody(p.xs[2], ctx, { endKw: null }));
     } else if (!isLeaf(x) && x.kind === 'finally') {
       const p = parts(x);
       if (p.comments.length || !kw(p.xs[0], 'finally') || p.xs.length !== 2) return null;
@@ -578,7 +605,7 @@ function printStruct(n, ctx) {
   if (xs.length !== i + 3 || xs[i + 1].kind !== 'block' || !kw(xs[i + 2], 'end')) return null;
   if (comments.some(k => k.at !== i + 1 && k.at !== i + 2)) return null;
   const block = xs[i + 1];
-  head.push('struct ', print(xs[i], ctx, n), comments.map(k => printCommentInline(k.c)));
+  head.push('struct ', print(xs[i], ctx, n), commentGroup(comments.map(k => k.c)));
   const r = parts(block);
   if (!r.xs.length && !r.comments.length && !hasNewline(ctx.text, xs[i].end, xs[i + 2].start)) return [head, ' end'];
   return [head, blockBody(block, ctx)];
@@ -590,19 +617,19 @@ function printModule(n, ctx) {
   if (comments.some(k => k.at !== 2 && k.at !== 3)) return null;
   // Module bodies are not indented (Runic, BlueStyle); one blank line after the header and
   // before `end` is kept when written.
-  return [n.kind, ' ', print(xs[1], ctx, n), comments.map(k => printCommentInline(k.c)),
+  return [n.kind, ' ', print(xs[1], ctx, n), commentGroup(comments.map(k => k.c)),
     blockBody(xs[2], ctx, { keepEdgeBlank: true, noIndent: true })];
 }
 
 function printDo(n, ctx) {
   const { xs, comments } = parts(n);
-  if (comments.length || !kw(xs[0], 'do') || !kw(xs.at(-1), 'end')) return null;
+  if (!kw(xs[0], 'do') || !kw(xs.at(-1), 'end') || comments.some(k => k.at > xs.length - 2)) return null;
   const block = xs.at(-2);
   if (!block || block.kind !== 'block') return null;
   const args = xs.slice(1, -2);
   if (args.length > 1) return null;
   const a = args.length && !(args[0].kind === 'tuple' && parts(args[0]).xs.length === 0) ? [' ', print(args[0], ctx, n)] : '';
-  return ['do', a, blockBody(block, ctx)];
+  return ['do', a, commentGroup(comments.map(k => k.c)), blockBody(block, ctx)];
 }
 
 /** `"""doc""" f`: the docstring, then the documented expression on the next line (or same line as written). */
@@ -742,12 +769,18 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
   const content = [];
   if (elems.length) content.push(items);
   if (params) {
-    if (elems.length) content.push(';', line);
+    if (elems.length) content.push(n.kind === 'tuple' && elems.length === 1 ? ',;' : ';', line);
     else content.push(';', params.length ? line : '');
     params.forEach((e, i) => {
       const last = i === params.length - 1;
       content.push(e.doc, last ? '' : ',', e.trail, last ? '' : line);
     });
+  }
+  const hugKind = !hasComments && !params && L.elems.length && !L.elems.at(-1).lead.length && !L.dangling.length
+    && huggable(L.elems.at(-1).n, ctx, elems.at(-1).doc);
+  if (single && hugKind) {
+    const broken = group([L.open, indent([softline, elems[0].doc, tail]), softline, L.close]);
+    return [prefix, hugChoice(null, L.open, elems[0].doc, [tail === ',' ? ',' : '', L.close], broken, hugKind), printAfter(L, n, ctx)];
   }
   if (single && L.elems[0] && !L.elems[0].lead.length) {
     // the one element's own trailing comment goes after the (optional) comma
@@ -764,23 +797,52 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
   // A last parameter's trailing comment comes after the trailing comma.
   const dangling = L.dangling.map(c => [hardline, printOwnLineComment(c)]);
   const doc = group([L.open, indent([softline, content, tail, dangling]), softline, L.close]);
-  if (!hasComments && !params && elems.length > 1 && huggable(L.elems.at(-1).n, ctx, elems.at(-1).doc)
-      && !elems.slice(0, -1).some(e => docUtils.willBreak(e.doc))) {
+  if (hugKind && elems.length > 1 && !elems.slice(0, -1).some(e => docUtils.willBreak(e.doc))) {
     // `f(a, b, [` … `])`: the last argument opens on the first line and closes the call
-    const hugged = [L.open, join(', ', elems.slice(0, -1).map(e => e.doc)), ', ', elems.at(-1).doc, L.close];
-    return [prefix, builders.conditionalGroup([hugged, doc]), printAfter(L, n, ctx)];
+    const head = [L.open, join(', ', elems.slice(0, -1).map(e => e.doc)), ', '];
+    return [prefix, hugChoice(null, head, elems.at(-1).doc, L.close, doc, hugKind), printAfter(L, n, ctx)];
   }
   return [prefix, hasComments ? [breakParent, doc] : doc, printAfter(L, n, ctx)];
 }
 
-const HUGGABLE = new Set(['vect', 'vcat', 'hcat', 'ncat', 'typed_vcat', 'typed_hcat', 'typed_ncat', 'comprehension', 'typed_comprehension', 'string', 'cmdstring', 'braces', 'tuple', 'function', 'macrocall', 'do', 'let', 'block', 'quote']);
-/** A last list element that spans lines and may open on the call's first line. */
+const BRACKET_HUG = new Set(['vect', 'braces', 'comprehension', 'typed_comprehension']);
+const BLOCK_HUG = new Set(['vcat', 'hcat', 'ncat', 'typed_vcat', 'typed_hcat', 'typed_ncat', 'string', 'cmdstring',
+  'function', 'macrocall', 'do', 'let', 'block', 'quote', 'call', 'dotcall', 'ref', 'curly', 'tuple', 'parens']);
+/**
+ * May this last list element (or right operand) open on the first line and close the
+ * expression (`f(a, [` … `])`)? Brackets always may (deterministic, as Prettier does for
+ * arrays and objects); other kinds only when their printed doc has forced line breaks
+ * (blocks, multi-line strings, kept-as-written regions), which then stay at a stable
+ * indentation.
+ */
 function huggable(n, ctx, doc = null) {
-  if (!hasNewline(ctx.text, n.start, n.end) && !(doc && docUtils.willBreak(doc))) return false;
-  if (ctx.protect.has(n)) return true;
-  if (n.kind === 'macrocall') return isStringMacro(n) || (!hasParen(n) && parts(n).xs.length === 2 && huggable(parts(n).xs[1], ctx));
-  if (n.kind === 'tuple') return parts(n).xs.length > 0 && kw(parts(n).xs[0], '(');
-  return HUGGABLE.has(n.kind);
+  if (!ctx.protect.has(n) && (BRACKET_HUG.has(n.kind) || (n.kind === 'tuple' && kw(parts(n).xs[0] ?? n, '(')))) return 'bracket';
+  if (doc && docUtils.willBreak(doc) && (ctx.protect.has(n) || BLOCK_HUG.has(n.kind) || isLeaf(n))) return 'forced';
+  return false;
+}
+
+/** A copy of `doc` whose first group is broken (for "hug, but break the last element" states). */
+function breakFirstGroup(doc) {
+  let done = false;
+  const walk = d => {
+    if (done || d === null || typeof d !== 'object') return d;
+    if (Array.isArray(d)) return d.map(walk);
+    if (d.type === 'group') { done = true; return { ...d, break: true }; }
+    if (d.contents !== undefined) return { ...d, contents: walk(d.contents) };
+    if (d.parts !== undefined) return { ...d, parts: walk(d.parts) };
+    return d;
+  };
+  return walk(doc);
+}
+
+/** Layout choices for "prefix + last" where last may hug: flat, hugged with last broken, `broken`. */
+function hugChoice(flatDoc, huggedPrefix, lastDoc, suffix, broken, kind) {
+  const states = kind === 'bracket'
+    ? [[huggedPrefix, lastDoc, suffix], [huggedPrefix, breakFirstGroup(lastDoc), suffix], broken]
+    : [[huggedPrefix, lastDoc, suffix], broken];
+  // conditionalGroup doesn't pass forced breaks to enclosing groups; do it here so they
+  // never keep a multi-line part inside a flat `indent` (which would shift it each run).
+  return [builders.conditionalGroup(states), kind === 'forced' ? breakParent : ''];
 }
 
 const OPEN_ENDED = new Set(['return', 'continue', 'break', 'const', 'global', 'local']);
@@ -909,21 +971,25 @@ function printInfix(n, xs, comments, ctx) {
   }
   if (!ops.length) return null;
   const opText = ops[0].text;
-  if (ops.some(o => o.text !== opText && !(o.text === ':' && opText === ':'))) return null;
+  if (n.kind !== 'comparison' && ops.some(o => o.text !== opText)) return null;
+  if (n.kind === 'comparison' && ops.some(o => TIGHT_OPS.has(o.text) || WORD_OPS.has(o.text) && false)) return null;
   const isRange = opText === ':';
   const tight = TIGHT_OPS.has(opText) || (ctx.compact && !WORD_OPS.has(opText) && !/^\p{L}/u.test(opText));
   const inner = isRange ? sub(ctx, { compact: true }) : ctx;
   const docs = operands.map(o => print(o, inner, n));
   // Comments inside an infix expression: keep each one at the end of its line.
   // comments before an operator (or between `.` and it) and right after it: at the operator
-  const cm = (lo, hi) => comments.filter(c => c.at > lo && c.at <= hi).map(c => printCommentInline(c.c));
+  const cm = (lo, hi) => commentGroup(comments.filter(c => c.at > lo && c.at <= hi).map(c => c.c));
   if (comments.some(c => c.at > ops.at(-1).at)) return null;
   if (tight) {
     const out = [docs[0]];
     ops.forEach((o, k) => {
       const l = operands[k], r = operands[k + 1];
-      const needSpace = OP_CHARS.test(ctx.text[r.start]) || /[+\-*/\\^%<>=!~&|:.]$/u.test(ctx.text.slice(l.start, l.end))
-        || (opText === ':' && (ctx.text[r.start] === ':' || ctx.text[l.end - 1] === ':'));
+      // spaces only where gluing would make a different token (`a: :b` ≠ `a::b`)
+      const lc = ctx.text[l.end - 1], rc = ctx.text[r.start];
+      const needSpace = opText === ':' || opText === '^' || opText === '.^'
+        ? /[:=<>.]/.test(rc) || /[:.]/.test(lc) || (o.text.startsWith('.') && /[0-9]/.test(lc))
+        : OP_CHARS.test(rc) || /[+\-*/\\^%<>=!~&|:.]$/u.test(lc);
       const sp = needSpace ? ' ' : '';
       out.push(sp, o.text, cm(o.opAt - 1, o.at), sp, docs[k + 1]);
     });
@@ -933,9 +999,15 @@ function printInfix(n, xs, comments, ctx) {
   const lastOp = operands.at(-1);
   // Never indent a part that will break without a line break before it (keeps verbatim
   // regions and multi-line strings at a stable indentation).
-  const hugLast = (ops.length === 1 && !comments.length && huggable(lastOp, ctx, docs.at(-1))) || docs.slice(1).some(d => docUtils.willBreak(d));
-  const rest = ops.map((o, k) => [' ', o.text, cm(o.opAt - 1, o.at), hugLast ? ' ' : ln(ctx), docs[k + 1]]);
-  if (ctx.flat || hugLast) return [docs[0], rest];
+  const hugKind = ops.length === 1 && !comments.length && huggable(lastOp, ctx, docs.at(-1));
+  const forced = docs.slice(1).some(d => docUtils.willBreak(d));
+  const rest = ops.map((o, k) => [' ', o.text, cm(o.opAt - 1, o.at), forced || ctx.flat ? ' ' : line, docs[k + 1]]);
+  if (ctx.flat || forced) return [docs[0], rest];
+  if (hugKind === 'bracket') {
+    // `x in (` … `)` rather than breaking after `in`
+    const broken = group([docs[0], indent(rest)]);
+    return hugChoice(null, [docs[0], ' ', ops[0].text, ' '], docs[1], '', broken, hugKind);
+  }
   return group([docs[0], indent(rest)]);
 }
 

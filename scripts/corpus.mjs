@@ -38,7 +38,7 @@ if (isMainThread) {
     if (file === null) { process.exit(0); }
     const r = { file };
     try {
-      const text = readFileSync(file, 'utf8');
+      const text = readFileSync(file, 'utf8').replace(/\r\n?/g, '\n'); // as Prettier does before parsing
       r.bytes = Buffer.byteLength(text);
       const t = performance.now();
       let res;

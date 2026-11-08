@@ -42,10 +42,13 @@ export function formatParsed(parsed, options = {}, hooks = {}) {
   const reasons = new Map();
   const doVerify = options.juliaVerify !== false;
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-    let doc = printJulia(tree, text, protect);
-    if (hooks.mapDoc) doc = hooks.mapDoc(doc);
-    let output = render(doc, options);
-    if (hooks.mapOutput) output = hooks.mapOutput(output, round);
+    let output;
+    try {
+      output = render(printJulia(tree, text, protect, hooks.mutate ?? null), options);
+    } catch (e) {
+      // A printer bug must not lose the file: keep it as written and say why.
+      return { output: text, regions: [], whole: `printer error: ${e?.message ?? e}`, rounds: round, error: e };
+    }
     if (!doVerify) return { output, regions: [], whole: null, rounds: round };
     const d = verify(tree, output);
     if (!d) return { output, regions: regionsOf(protect, reasons, tree), whole: null, rounds: round };
