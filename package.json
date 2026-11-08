@@ -6,15 +6,43 @@
   "type": "module",
   "license": "MIT",
   "author": "Panagiotis Georgakopoulos",
-  "keywords": ["prettier", "prettier-plugin", "julia", "formatter", "juliasyntax", "webassembly"],
-  "engines": { "node": ">=22.12" },
+  "keywords": [
+    "prettier",
+    "prettier-plugin",
+    "julia",
+    "formatter",
+    "juliasyntax",
+    "webassembly"
+  ],
+  "engines": {
+    "node": "^22.23.3 || ^24.22.1"
+  },
   "main": "./src/index.js",
-  "exports": { ".": "./src/index.js" },
-  "files": ["src/", "wasm/", "scripts/parser/", "README.md", "LICENSE", "ECOSYSTEM.md"],
-  "peerDependencies": { "prettier": "^3.0.0" },
-  "devDependencies": { "prettier": "3.9.10" },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "wasm/",
+    "scripts/parser/",
+    "README.md",
+    "LICENSE",
+    "ECOSYSTEM.md",
+    "STYLE.md"
+  ],
+  "peerDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
+  },
   "scripts": {
-    "test": "node --test tests/",
-    "corpus": "node scripts/corpus.mjs"
+    "test": "node scripts/check-artifact.mjs && node --test tests/*.test.js",
+    "corpus": "node scripts/corpus.mjs",
+    "corpus:summary": "node scripts/corpus-summary.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pankgeorg/prettier-plugin-julia.git"
   }
 }

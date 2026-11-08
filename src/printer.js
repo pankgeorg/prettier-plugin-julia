@@ -142,7 +142,9 @@ function printCommentInline(n) {
   return n.text.includes('\n') ? literalText(n.text) : n.text;
 }
 
-const literalText = s => join(literallineWithoutBreakParent, s.split('\n'));
+// Multi-line text printed exactly (columns kept). It breaks the enclosing groups, so that
+// the text never sits inside a flat `indent` whose depth could change on the next run.
+const literalText = s => join(builders.literalline, s.split('\n'));
 
 // ─── Verbatim ──────────────────────────────────────────────────────────
 
@@ -304,7 +306,11 @@ const OPENERS = new Set(['(', '[', '{']);
 const CLOSERS = new Set([')', ']', '}', 'end']);
 
 /** All tokens in order; whitespace normalized; line breaks kept; continuation indented. */
+/** Debug counter: which kinds reach the token printer (set by scripts/coverage.mjs). */
+export const tokenPrinterStats = { enabled: false, kinds: new Map() };
+
 function printTokens(n, ctx) {
+  if (tokenPrinterStats.enabled) tokenPrinterStats.kinds.set(n.kind, (tokenPrinterStats.kinds.get(n.kind) ?? 0) + 1);
   const out = [];
   let ws = '', prev = null;
   for (const c of n.children) {
@@ -315,7 +321,7 @@ function printTokens(n, ctx) {
       // a statement list inside a construct we don't know: one statement per line, indented
       const r = printStatements(c.children, ctx);
       if (prev !== null && !nls && !hasNewline(ctx.text, c.start, c.end)) {
-        out.push(gap ? ' ' : '', r.empty ? '' : r.doc);
+        out.push(gap ? ' ' : '', printTokens(c, ctx));
       } else {
         out.push(r.headerComments.map(trailingComment), r.empty ? '' : indent([hardline, r.doc]));
         prev = c; ws = '\n'; continue;
@@ -430,6 +436,7 @@ const PRINTERS = {
   'string': printString,
   'cmdstring': printString,
   'char': (n, ctx) => printVerbatim(n, ctx),
+  'var': (n, ctx) => printVerbatim(n, ctx),
   'macrocall': printMacrocall,
   'tuple': printTuple,
   'vect': (n, ctx) => printBracketList(n, ctx, '[', ']'),
@@ -457,6 +464,13 @@ const PRINTERS = {
   'global': printKeywordPrefix,
   'local': printKeywordPrefix,
   'return': printKeywordPrefix,
+  'export': printImportList,
+  'public': printImportList,
+  'using': printImportList,
+  'import': printImportList,
+  'generator': printGenerator,
+  'comprehension': printComprehension,
+  'typed_comprehension': printComprehension,
   'hcat': printMatrix,
   'vcat': printMatrix,
   'ncat': printMatrix,
@@ -552,7 +566,8 @@ function printIn(n, ctx) {
 }
 
 function printLet(n, ctx) {
-  const { xs, comments } = parts(n);
+  let { xs, comments } = parts(n);
+  if (xs.length === 5 && kw(xs[2], ';') && !comments.some(k => k.at >= 2)) xs = [xs[0], xs[1], xs[3], xs[4]];
   if (!kw(xs[0], 'let') || !kw(xs.at(-1), 'end') || xs.length !== 4 || comments.length) return null;
   const [, binds, body] = xs;
   if (binds.kind !== 'block' || body.kind !== 'block') return null;
@@ -613,11 +628,12 @@ function printStruct(n, ctx) {
 
 function printModule(n, ctx) {
   const { xs, comments } = parts(n);
-  if (!kw(xs[0], n.kind) || !kw(xs.at(-1), 'end') || xs.length !== 4 || xs[2].kind !== 'block') return null;
+  const word = xs[0]?.text;
+  if (!(kw(xs[0], 'module') || kw(xs[0], 'baremodule')) || !kw(xs.at(-1), 'end') || xs.length !== 4 || xs[2].kind !== 'block') return null;
   if (comments.some(k => k.at !== 2 && k.at !== 3)) return null;
   // Module bodies are not indented (Runic, BlueStyle); one blank line after the header and
   // before `end` is kept when written.
-  return [n.kind, ' ', print(xs[1], ctx, n), commentGroup(comments.map(k => k.c)),
+  return [word, ' ', print(xs[1], ctx, n), commentGroup(comments.map(k => k.c)),
     blockBody(xs[2], ctx, { keepEdgeBlank: true, noIndent: true })];
 }
 
@@ -764,13 +780,12 @@ function printListBody(L, n, ctx, prefix, { forceComma = false, noTrailingComma 
   const lastN = params ? L.params.elems.at(-1)?.n : L.elems.at(-1)?.n;
   const lastIsGenerator = (lastN && ['generator', 'flatten'].includes(lastN.kind) && !params) || (lastN && endsOpen(lastN));
   let tail = '';
-  if (forceComma && single) tail = ',';
-  else if (!noTrailingComma && !lastIsGenerator && (elems.length || params?.length)) tail = ifBreak(',');
+  if (forceComma && single && L.trailingComma) tail = ',';
+  else if (!noTrailingComma && !lastIsGenerator && (params ? params.length : elems.length)) tail = ifBreak(',');
   const content = [];
   if (elems.length) content.push(items);
   if (params) {
-    if (elems.length) content.push(n.kind === 'tuple' && elems.length === 1 ? ',;' : ';', line);
-    else content.push(';', params.length ? line : '');
+    content.push(n.kind === 'tuple' && elems.length === 1 ? ',;' : ';', params.length ? line : '');
     params.forEach((e, i) => {
       const last = i === params.length - 1;
       content.push(e.doc, last ? '' : ',', e.trail, last ? '' : line);
@@ -910,7 +925,7 @@ function printParens(n, ctx) {
   const { xs, comments } = parts(n);
   if (xs.length !== 3 || !kw(xs[0], '(') || !kw(xs[2], ')') || comments.length) return null;
   if (n.children.some(c => isWs(c) && c.text.includes('\n'))) return null;
-  return ['(', print(xs[1], sub(ctx, { flat: false }), n), ')'];
+  return ['(', print(xs[1], sub(ctx, { flat: false, compact: false }), n), ')'];
 }
 
 // ─── Calls and operators ───────────────────────────────────────────────
@@ -1001,8 +1016,12 @@ function printInfix(n, xs, comments, ctx) {
   // regions and multi-line strings at a stable indentation).
   const hugKind = ops.length === 1 && !comments.length && huggable(lastOp, ctx, docs.at(-1));
   const forced = docs.slice(1).some(d => docUtils.willBreak(d));
-  const rest = ops.map((o, k) => [' ', o.text, cm(o.opAt - 1, o.at), forced || ctx.flat ? ' ' : line, docs[k + 1]]);
-  if (ctx.flat || forced) return [docs[0], rest];
+  const hasCm = o => comments.some(c => c.at > o.opAt - 1 && c.at <= o.at);
+  // a line comment after an operator needs the line break right there (legal after a binary operator)
+  const rest = ops.map((o, k) => [' ', o.text, cm(o.opAt - 1, o.at), hasCm(o) ? hardline : forced || ctx.flat ? ' ' : line, docs[k + 1]]);
+  if (ctx.flat || forced) return [docs[0], comments.length ? indent(rest) : rest];
+  // a multi-line first operand (`"""..."""  |> f |> g`): the rest may stay on its last line
+  if (docUtils.willBreak(docs[0])) return [docs[0], group(indent(rest))];
   if (hugKind === 'bracket') {
     // `x in (` … `)` rather than breaking after `in`
     const broken = group([docs[0], indent(rest)]);
@@ -1143,5 +1162,66 @@ function printMatrix(n, ctx) {
     return true;
   };
   if (walk(n) === false) return printVerbatim(n, ctx);
-  return out;
+  // a matrix written on one line stays on one line (a line break would add a row)
+  return docUtils.removeLines(out);
+}
+
+// ─── using / import / export, generators ───────────────────────────────
+
+/** `export a, b, …` / `using A: b, c`: items filled to the line width, continuation indented. */
+function printImportList(n, ctx) {
+  let { xs, comments } = parts(n);
+  if (comments.length) return null;
+  let kwTok = xs[0], head = null, node = n;
+  if (xs.length === 1 && !isLeaf(xs[0]) && xs[0].kind === ':') {
+    node = xs[0];
+    const p = parts(node);
+    if (p.comments.length) return null;
+    xs = p.xs;
+    kwTok = xs[0];
+    if (!kw(xs[2], ':')) return null;
+    head = xs[1];
+    xs = [xs[0], ...xs.slice(3)];
+  }
+  if (!kw(kwTok, n.kind)) return null;
+  const items = [];
+  for (let i = 1; i < xs.length; i++) {
+    if (i % 2 === 0) { if (!kw(xs[i], ',')) return null; continue; }
+    if (isLeaf(xs[i]) && isTriviaLeaf(xs[i])) return null;
+    items.push(print(xs[i], ctx, node));
+  }
+  if (!items.length || xs.length % 2 !== 0) return null;
+  const fillParts = [];
+  items.forEach((d, i) => { if (i) fillParts.push([',', ctx.flat ? ' ' : line]); fillParts.push(d); });
+  return [n.kind, ' ', head ? [print(head, ctx, node), ': '] : '', indent(builders.fill(fillParts))];
+}
+
+/** `body for x in xs if c`: may break before `for` and `if`. */
+function printGenerator(n, ctx) {
+  const { xs, comments } = parts(n);
+  if (comments.length || xs.length < 3) return null;
+  const out = [print(xs[0], ctx, n)];
+  for (let i = 1; i < xs.length; i++) {
+    const x = xs[i];
+    if (kw(x, 'for')) { out.push(ln(ctx), 'for '); continue; }
+    if (isLeaf(x) && isTriviaLeaf(x)) return null;
+    if (!isLeaf(x) && x.kind === 'filter') {
+      const p = parts(x);
+      if (p.comments.length || p.xs.length !== 3 || !kw(p.xs[1], 'if')) return null;
+      out.push(print(p.xs[0], ctx, x), ln(ctx), 'if ', print(p.xs[2], ctx, x));
+      continue;
+    }
+    out.push(print(x, ctx, n));
+  }
+  return ctx.flat ? out : group([out[0], indent(out.slice(1))]);
+}
+
+function printComprehension(n, ctx) {
+  const { xs, comments } = parts(n);
+  if (comments.length) return null;
+  let i = 0, prefix = '';
+  if (n.kind === 'typed_comprehension') { prefix = print(xs[0], ctx, n); i = 1; }
+  if (!kw(xs[i], '[') || !kw(xs[i + 2], ']') || xs.length !== i + 3) return null;
+  const inner = sub(ctx, { flat: false, compact: false });
+  return [prefix, group(['[', indent([softline, print(xs[i + 1], inner, n)]), softline, ']'])];
 }
