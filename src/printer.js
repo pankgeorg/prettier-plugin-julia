@@ -83,7 +83,7 @@ function isStringMacro(n) {
  * @param protect Set of nodes to print verbatim
  */
 export function printJulia(tree, text, protect = new Set(), mutate = null) {
-  TEXT = text;
+  TEXT = text; ROOT = tree.root;
   const ctx = { text, protect, flat: false, compact: false, parent: null, mutate };
   const { doc, empty } = printStatements(tree.root.children, ctx, { top: true });
   return empty ? '' : [doc, hardline];
@@ -127,7 +127,7 @@ function printLeaf(n, ctx) {
   return n.text.includes('\n') ? literalText(n.text) : n.text;
 }
 
-let TEXT = '';
+let TEXT = '', ROOT = null;
 /** Comments inside an expression: all at the end of the current line, one per line, in order. */
 function commentGroup(cs) {
   if (!cs.length) return '';
@@ -169,9 +169,30 @@ function verbatimSlice(text, start, end, node) {
   const lines = s.split('\n');
   const ls = lineStart(text, start);
   const indentStr = /^[ \t]*/.exec(text.slice(ls, start))[0];
-  const literal = (node && hasMultilineLeaf(node)) || lines.slice(1).some(l => l.trim() !== '' && !l.startsWith(indentStr));
+  const literal = (node && hasMultilineLeaf(node)) || lines.slice(1).some(l => l.trim() !== '' && !l.startsWith(indentStr))
+    || (node && lineStartsInsideOther(node, ls));
   if (literal) return literalText(s);
   return join(hardline, lines.map((l, i) => i === 0 ? l : l.trim() === '' ? '' : l.slice(indentStr.length)));
+}
+
+const KEPT_MULTILINE = new Set(['vcat', 'hcat', 'ncat', 'typed_vcat', 'typed_hcat', 'typed_ncat', 'string', 'cmdstring']);
+/**
+ * Does the line `node` starts on begin inside another region printed as written (a
+ * multi-line matrix, string or comment)? Then that line's indentation isn't the printer's,
+ * and re-indenting relative to it would drift on every run: keep exact columns instead.
+ */
+function lineStartsInsideOther(node, ls) {
+  if (ls === 0 || !ROOT) return false;
+  const nl = ls - 1;
+  let n = ROOT;
+  for (;;) {
+    const c = isLeaf(n) ? null : n.children.find(k => k.start <= nl && nl < k.end);
+    if (!c) return false;
+    if (c.start <= node.start && node.end <= c.end) { if (c === node) return false; n = c; continue; }
+    if (isLeaf(c)) return !isWs(c);
+    if (KEPT_MULTILINE.has(c.kind) || isStringMacro(c)) return true;
+    n = c;
+  }
 }
 
 /**
@@ -185,8 +206,9 @@ function printString(n, ctx) {
   const triple = flag(n, 0x100) || (isStringMacro(n) && n.children.some(c => !isLeaf(c) && flag(c, 0x100)));
   const lines = s.split('\n');
   if (!triple || lines.some(l => /[ \t]$/.test(l))) return literalText(s);
-  const indentStr = /^[ \t]*/.exec(ctx.text.slice(lineStart(ctx.text, n.start), n.start))[0];
-  if (lines.slice(1).some(l => l !== '' && !l.startsWith(indentStr))) return literalText(s);
+  const ls = lineStart(ctx.text, n.start);
+  const indentStr = /^[ \t]*/.exec(ctx.text.slice(ls, n.start))[0];
+  if (lines.slice(1).some(l => l !== '' && !l.startsWith(indentStr)) || lineStartsInsideOther(n, ls)) return literalText(s);
   return join(hardline, lines.map((l, i) => i === 0 ? l : l.slice(indentStr.length)));
 }
 
