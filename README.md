@@ -38,9 +38,9 @@ Node `^22.23.3` or `^24.22.1`, and Prettier 3. Not on npm yet: install from the 
 release.
 
 ```sh
-npm install --save-dev prettier https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.1.0/prettier-plugin-julia-0.1.0.tgz
+npm install --save-dev prettier https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.2.0/prettier-plugin-julia-0.2.0.tgz
 # or from the git tag:
-npm install --save-dev prettier github:pankgeorg/prettier-plugin-julia#v0.1.0
+npm install --save-dev prettier github:pankgeorg/prettier-plugin-julia#v0.2.0
 ```
 
 ## Usage
@@ -176,8 +176,8 @@ as quick as either. Where the time goes (`node scripts/bench.mjs`, s/MB):
 | Verification: tree building and comparison   |     0.17 |  13 |
 | **Total**                                    | **1.31** |     |
 
-The parser itself is under a fifth of the time. The same parser built with WasmCodegen main
-`10cff8e` (2026-11-10) parses at the same speed and gives identical trees.
+The parser itself is under a fifth of the time. v0.2.0's parser, rebuilt on WasmCodegen main
+`98cad1f`, parses at the same speed and gives identical trees.
 
 ## Development
 

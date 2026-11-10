@@ -1,17 +1,18 @@
 {
   "schemaVersion": 1,
-  "sha256": "08b1b81beac1f8a5aa7b4467bd5a1024f99f32cf03c1f33f7fca81a556fe8859",
-  "bytes": 735576,
+  "sha256": "189b319e4bc7f338a5b1128e5822f08f730227b2050fab28aced3b95e1f17b5d",
+  "bytes": 739251,
   "sources": {
-    "parser": "https://github.com/pankgeorg/topiary-julia/blob/main/jlparse/parser.jl",
-    "build": "https://github.com/pankgeorg/topiary-julia/blob/main/jlparse/build.jl",
+    "parser": "https://github.com/pankgeorg/topiary-julia/blob/jlparse/jlparse/parser.jl",
+    "build": "https://github.com/pankgeorg/topiary-julia/blob/jlparse/jlparse/build.jl",
     "snapshot": "scripts/parser.jl and scripts/build-parser.jl (vendored artifact inputs)"
   },
   "versions": {
     "julia": "1.13.2",
-    "juliaSyntax": "Base.JuliaSyntax shipped in Julia 1.13.2",
-    "wasmCodegenCommit": "316bbaf",
-    "wasmOpt": "-O3; executable version not recorded"
+    "juliaSyntax": "Base.JuliaSyntax shipped in Julia 1.13.2 (JuliaSyntax e8a07f5; the same in Julia 1.13.3)",
+    "wasmCodegenCommit": "98cad1f",
+    "wasmBuilder": "0.1.1 (main 0664daf)",
+    "wasmOpt": "-O3 (Binaryen_jll 0.130.0, WasmCodegen default)"
   },
   "abi": {
     "version": 1,
@@ -38,6 +39,6 @@
   "reference": "tests/fixtures/jlparse_reference.json; 21 native JuliaSyntax sources, 76494 nodes",
   "notes": [
     "Requires Wasm GC and exception handling; no imports.",
-    "Source snapshots are authoritative for this artifact; original topiary-julia commit was not recorded."
+    "Built from the vendored parser.jl and build-parser.jl (sources.snapshot), unchanged since v0.1.0, in WasmCodegen.jl's examples/juliasyntax environment."
   ]
 }
