@@ -62,8 +62,9 @@ fitting, verification) in s/MB.
 ## The parser artifact
 
 `wasm/parser.wasm` is JuliaSyntax, as shipped with Julia 1.13.2, compiled to WebAssembly by
-[WasmCodegen.jl](https://github.com/pankgeorg/WasmCodegen.jl) (commit `316bbaf`, `wasm-opt
--O3`). It has no imports. `wasm/manifest.json` records its hash, size, versions and exported
+[WasmCodegen.jl](https://github.com/gbaraldi/WasmCodegen.jl) (commit `316bbaf`, `wasm-opt
+-O3`). It has no imports. A rebuild on WasmCodegen main `10cff8e` gives identical parser output
+(150 files of Julia's `base/`) and passes `npm test`. `wasm/manifest.json` records its hash, size, versions and exported
 ABI; `npm test` checks the artifact against it first.
 
 The artifact and the JavaScript that reads it (`src/parser/*.js`) are copied unmodified from
