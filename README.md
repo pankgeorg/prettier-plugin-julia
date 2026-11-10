@@ -176,8 +176,8 @@ as quick as either. Where the time goes (`node scripts/bench.mjs`, s/MB):
 | Verification: tree building and comparison   |     0.17 |  13 |
 | **Total**                                    | **1.31** |     |
 
-The parser itself is under a fifth of the time; a WasmCodegen build with its pending
-optimizations parsed at the same speed.
+The parser itself is under a fifth of the time. The same parser built with WasmCodegen main
+`10cff8e` (2026-11-10) parses at the same speed and gives identical trees.
 
 ## Development
 
