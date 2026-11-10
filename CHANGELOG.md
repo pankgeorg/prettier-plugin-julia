@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
+### Changed
+
+- `wasm/parser.wasm` rebuilt on [WasmCodegen.jl](https://github.com/gbaraldi/WasmCodegen.jl)
+  main `98cad1f` (v0.1.0: `316bbaf`), with WasmBuilder.jl 0.1.1 and `wasm-opt -O3`
+  (Binaryen 130). JuliaSyntax is unchanged: the one shipped in Julia 1.13.2 (also the one in
+  1.13.3). The parser output is identical to v0.1.0's on 25,174 real-world Julia files, and
+  parsing speed is the same within noise (0.156 → 0.159 s/MB). The module is 739,251 bytes
+  (was 735,576). `wasm/manifest.json` also records the WasmBuilder and Binaryen versions.
+  It is the same file as in eslint-plugin-julia v0.2.0. The build was first checked on
+  WasmCodegen main in #2; this release ships it.
+
+### Fixed
+
+- The source links in `wasm/manifest.json` point at topiary-julia's `jlparse` branch, where
+  the parser sources are (the links to `main` were broken).
+
 ## [0.1.0] - 2026-11-08
 
 First release, distributed as a GitHub release tarball (not on npm yet).
@@ -30,5 +48,6 @@ First release, distributed as a GitHub release tarball (not on npm yet).
 Tested on 25,174 real-world Julia files: all valid files formatted and verified, no region
 kept as written, formatting is idempotent.
 
-[Unreleased]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pankgeorg/prettier-plugin-julia/releases/tag/v0.1.0

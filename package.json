@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-julia",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Prettier plugin for Julia, using Julia's own parser (JuliaSyntax) compiled to WebAssembly; every format is checked to keep the program's meaning",
   "keywords": [

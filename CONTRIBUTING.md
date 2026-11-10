@@ -16,7 +16,7 @@ npm run format         # fix formatting
 ```
 
 CI runs the same commands on Linux, macOS and Windows with Node 22 and 24, plus a packaging
-test (`npm pack`, then `node scripts/smoke.mjs prettier-plugin-julia-0.1.0.tgz` installs the
+test (`npm pack`, then `node scripts/smoke.mjs prettier-plugin-julia-0.2.0.tgz` installs the
 tarball into a scratch project and runs the CLI).
 
 The formatting commit is listed in `.git-blame-ignore-revs`; run
@@ -62,9 +62,9 @@ fitting, verification) in s/MB.
 ## The parser artifact
 
 `wasm/parser.wasm` is JuliaSyntax, as shipped with Julia 1.13.2, compiled to WebAssembly by
-[WasmCodegen.jl](https://github.com/gbaraldi/WasmCodegen.jl) (commit `316bbaf`, `wasm-opt
--O3`). It has no imports. A rebuild on WasmCodegen main `10cff8e` gives identical parser output
-(150 files of Julia's `base/`) and passes `npm test`. `wasm/manifest.json` records its hash, size, versions and exported
+[WasmCodegen.jl](https://github.com/gbaraldi/WasmCodegen.jl) (main commit `98cad1f`, `wasm-opt
+-O3`). It has no imports. It gives the same parser output as v0.1.0's `316bbaf` build on 25,174
+real-world Julia files. `wasm/manifest.json` records its hash, size, versions and exported
 ABI; `npm test` checks the artifact against it first.
 
 The artifact and the JavaScript that reads it (`src/parser/*.js`) are copied unmodified from

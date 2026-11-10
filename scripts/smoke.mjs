@@ -1,6 +1,6 @@
 // Install the plugin into a fresh Julia project, the way docs/usage.md describes, and run the CLI.
 // usage: node scripts/smoke.mjs SPEC [PRETTIER_VERSION]
-//   SPEC: a tarball path (npm pack), a release URL, or github:pankgeorg/prettier-plugin-julia#v0.1.0
+//   SPEC: a tarball path (npm pack), a release URL, or github:pankgeorg/prettier-plugin-julia#v0.2.0
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';

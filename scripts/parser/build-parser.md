@@ -1,26 +1,29 @@
 # Parser artifact provenance and rebuilding
 
-The supplied parser.wasm is 735,576 bytes, SHA-256
-`08b1b81beac1f8a5aa7b4467bd5a1024f99f32cf03c1f33f7fca81a556fe8859`.
-It was built from topiary-julia's `jlparse/parser.jl` and `jlparse/build.jl`, using
-Julia 1.13.2 and WasmCodegen.jl main commit `316bbaf`, with `wasm-opt -O3`.
-Those two source files are copied here as `parser.jl` and `build-parser.jl`.
+The supplied parser.wasm is 739,251 bytes, SHA-256
+`189b319e4bc7f338a5b1128e5822f08f730227b2050fab28aced3b95e1f17b5d`.
+It was built from `parser.jl` and `build-parser.jl` here (unchanged since v0.1.0; they come
+from topiary-julia's `jlparse/parser.jl` and `jlparse/build.jl`), using Julia 1.13.2,
+WasmCodegen.jl main commit `98cad1f` (2026-11-10), WasmBuilder.jl 0.1.1, and `wasm-opt -O3`
+from Binaryen_jll 0.130.0 (WasmCodegen's default optimization).
+JuliaSyntax is the one shipped in Julia 1.13.2 (JuliaSyntax `e8a07f5`; Julia 1.13.3 ships the
+same commit).
 The manifest contains the full exported numeric ABI (17 functions; no imports).
 The compiler's numeric ABI uses 1-based source indices and inclusive diagnostic
 byte endpoints. The source uploader packs four bytes into a little-endian i32.
 
-This run did not rebuild the artifact. The original wasm-opt executable version
-and topiary-julia build commit were not recorded, so byte-for-byte reproducibility
-is not claimed. The supplied source snapshots and artifact hash pin this package.
-The compiler license was read at `316bbaf`; Julia and JuliaSyntax notices are
-copied from the installed 1.13.2 distribution into wasm/LICENSES/. A compiler
-notice is retained conservatively; no claim is made that all compiler code is
-embedded. No arbitrary third-party runtime has been inferred from the binary.
+v0.1.0 shipped a 735,576-byte build on WasmCodegen `316bbaf` (SHA-256 `08b1b81b…`). The
+`98cad1f` build gives the same green trees and diagnostics on 25,174 real-world Julia files.
+Two separate builds, on `10cff8e` and on `98cad1f` (which differ only in the README), gave
+identical bytes.
+Julia and JuliaSyntax notices are copied from the installed 1.13.2 distribution into
+wasm/LICENSES/, with WasmCodegen.jl's licence (unchanged at `98cad1f`).
 
 In a separate maintainer environment with dependencies already available:
 
 ```sh
-# Check out WasmCodegen.jl at 316bbaf and use its examples/juliasyntax environment.
+# Check out WasmCodegen.jl (main, 98cad1f for this artifact) and use its examples/juliasyntax
+# environment, which takes WasmBuilder.jl from its main branch.
 julia --project=/path/to/WasmCodegen.jl/examples/juliasyntax scripts/build-parser.jl
 ```
 

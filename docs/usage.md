@@ -24,13 +24,13 @@ handling) and Prettier 3. No Julia installation is needed: the parser ships as
 The plugin is not on npm yet. Install it from the GitHub release tarball:
 
 ```sh
-npm install --save-dev prettier https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.1.0/prettier-plugin-julia-0.1.0.tgz
+npm install --save-dev prettier https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.2.0/prettier-plugin-julia-0.2.0.tgz
 ```
 
 or from the git tag (the parser artifact is committed, so there is no build step):
 
 ```sh
-npm install --save-dev prettier github:pankgeorg/prettier-plugin-julia#v0.1.0
+npm install --save-dev prettier github:pankgeorg/prettier-plugin-julia#v0.2.0
 ```
 
 Once it is published to npm, `npm install --save-dev prettier prettier-plugin-julia` will
@@ -126,7 +126,7 @@ Three small files at the root of the Julia project, plus the lock file npm write
   "private": true,
   "devDependencies": {
     "prettier": "^3.9.10",
-    "prettier-plugin-julia": "https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.1.0/prettier-plugin-julia-0.1.0.tgz"
+    "prettier-plugin-julia": "https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.2.0/prettier-plugin-julia-0.2.0.tgz"
   },
   "scripts": {
     "format": "prettier --write \"**/*.jl\"",
@@ -189,7 +189,7 @@ Without a `package.json` in the repository, install the tools in the job instead
 `npm ci`:
 
 ```yaml
-- run: npm install --no-save prettier@3 https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.1.0/prettier-plugin-julia-0.1.0.tgz
+- run: npm install --no-save prettier@3 https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.2.0/prettier-plugin-julia-0.2.0.tgz
 - run: npx prettier --plugin prettier-plugin-julia --check "**/*.jl"
 ```
 
