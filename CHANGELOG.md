@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
+First release on npm: `npm install --save-dev prettier prettier-plugin-julia`. No
+changes to formatting.
+
 ## [0.2.0] - 2026-11-10
 
 ### Changed
@@ -48,6 +53,7 @@ First release, distributed as a GitHub release tarball (not on npm yet).
 Tested on 25,174 real-world Julia files: all valid files formatted and verified, no region
 kept as written, formatting is idempotent.
 
-[Unreleased]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/pankgeorg/prettier-plugin-julia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pankgeorg/prettier-plugin-julia/releases/tag/v0.1.0
