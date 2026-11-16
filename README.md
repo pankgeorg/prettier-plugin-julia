@@ -34,13 +34,10 @@ end
 
 ## Install
 
-Node `^22.23.3` or `^24.22.1`, and Prettier 3. Not on npm yet: install from the GitHub
-release.
+Node `^22.23.3` or `^24.22.1`, and Prettier 3.
 
 ```sh
-npm install --save-dev prettier https://github.com/pankgeorg/prettier-plugin-julia/releases/download/v0.2.0/prettier-plugin-julia-0.2.0.tgz
-# or from the git tag:
-npm install --save-dev prettier github:pankgeorg/prettier-plugin-julia#v0.2.0
+npm install --save-dev prettier prettier-plugin-julia
 ```
 
 ## Usage
