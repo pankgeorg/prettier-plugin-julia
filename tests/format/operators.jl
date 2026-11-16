@@ -1,0 +1,23 @@
+a=b+c*d
+x = a .+ b
+y .= f.(x)
+z = -x
+w = - 2
+v = !flag
+r = 1:n
+r2 = a : b
+r3 = 1:n-1
+r4 = 0:0.1:1
+p = x^2
+q = a//b
+s = x isa Int
+t = a ∈ b && c || d
+u = (a + b) * c
+k = a=>b
+m = x'
+n = x::Int
+o = a <: b
+i += 1
+j .*= 2
+c = a.b.c
+xs = [x...]

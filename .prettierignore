@@ -1,0 +1,11 @@
+# Generated or binary
+package-lock.json
+wasm/
+*.tgz
+
+# Test fixtures: unformatted inputs and expected outputs (checked by the tests)
+tests/format/
+
+# Vendored byte-for-byte from eslint-plugin-julia (see src/parser/VENDORED.md)
+src/parser/*.js
+scripts/parser/

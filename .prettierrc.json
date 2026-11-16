@@ -1,0 +1,6 @@
+{
+  "singleQuote": true,
+  "printWidth": 120,
+  "plugins": ["./src/index.js"],
+  "overrides": [{ "files": "*.jl", "options": { "printWidth": 92, "tabWidth": 4 } }]
+}
